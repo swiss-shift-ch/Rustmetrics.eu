@@ -68,9 +68,36 @@ CREATE TABLE IF NOT EXISTS watched_players (
     server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
     name        TEXT    NOT NULL,
     added_at    BIGINT  NOT NULL,
+    -- Optional: SteamID64 → Presence-Tracking via Steam Web API (umgeht
+    -- server.censorplayerlist / Streamer-Mode auf Facepunch-Officials)
+    steam_id    BIGINT,
     UNIQUE(user_id, server_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_watched_players_user ON watched_players(user_id);
+CREATE INDEX IF NOT EXISTS idx_watched_players_steam ON watched_players(steam_id) WHERE steam_id IS NOT NULL;
+
+-- Alias-Lernen: welcher zensierte Platzhaltername gehoert zu welchem Account?
+-- Wird aus Join-/Leave-Ereignissen hergeleitet (Steam-Presence + A2S-Listen-Diff).
+CREATE TABLE IF NOT EXISTS alias_candidates (
+    steam_id   BIGINT  NOT NULL,
+    server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    alias      TEXT    NOT NULL,
+    score      INTEGER NOT NULL DEFAULT 1,   -- bei wie vielen Ereignissen dabei
+    events     INTEGER NOT NULL DEFAULT 1,   -- wie viele Ereignisse insgesamt
+    first_seen BIGINT  NOT NULL DEFAULT 0,
+    last_seen  BIGINT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (steam_id, server_id, alias)
+);
+
+-- Steam-Presence-Status (global, ein Eintrag pro getrackter SteamID64)
+CREATE TABLE IF NOT EXISTS steam_presence (
+    steam_id    BIGINT PRIMARY KEY,
+    persona     TEXT,
+    visible     BOOLEAN,
+    in_rust     BOOLEAN NOT NULL DEFAULT FALSE,
+    server_addr TEXT,
+    updated_at  BIGINT NOT NULL DEFAULT 0
+);
 
 -- Player-Sessions (global): wann erschien ein Name auf welchem Server, wann verschwand er
 -- Wird per A2S-Diff gepflegt, alle User profitieren davon.

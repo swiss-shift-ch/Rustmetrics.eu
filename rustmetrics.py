@@ -15,224 +15,91 @@ Konfiguration über Environment-Variablen (siehe .env.example).
 
 from __future__ import annotations
 
-import hashlib
+import ipaddress
 import json
 import os
 import re
 import secrets
 import socket
-import struct
 import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as _FuturesTimeout
 from http.cookies import SimpleCookie
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
-import psycopg2
-import psycopg2.extras
-import psycopg2.pool
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  KONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _env(k, d=None, cast=str):
-    v = os.environ.get(k, d)
-    if v is None: return None
-    try: return cast(v)
-    except Exception: return d
-
-HOST            = _env("RM_HOST", "127.0.0.1")
-PORT            = _env("RM_PORT", 8765, int)
-ORIGIN          = _env("RM_ORIGIN", "https://rustmetrics.eu").rstrip("/")
-
-PG_DSN = (
-    f"host={_env('RM_PGHOST', '127.0.0.1')} "
-    f"port={_env('RM_PGPORT', 5432, int)} "
-    f"user={_env('RM_PGUSER', 'rustmetrics')} "
-    f"password={_env('RM_PGPASSWORD', '')} "
-    f"dbname={_env('RM_PGDATABASE', 'rustmetrics')}"
+# ── Modul-Split (Reddit-Feedback): Schichten unten, Fassade hier ─────────────
+# rustmetrics.py bleibt Entry-Point und re-exportiert die Namen, damit
+# systemd-Start und test_presence.py unveraendert funktionieren.
+from rm_config import (  # noqa: F401
+    _env, HOST, PORT, ORIGIN, PG_DSN, ADMIN_STEAMIDS, STEAM_API_KEY,
+    SESSION_TTL, POLL_INTERVAL, A2S_TIMEOUT, SNAPSHOT_TTL_DAY,
+    PLAYERS_JSON_KEEP_H, BROWSE_CACHE_TTL, BROWSE_PARALLEL, BROWSE_TIMEOUT,
+    BROWSE_BM_MAX_PAGES, BROWSE_RESULT_CAP, RL_BROWSE_PER_H, RL_REQ_PER_MIN,
+    CADDY_LOG_PATH, CADDY_LOG_MAX_BYTES, ROOT, STATIC_DIR, TEMPLATES_DIR,
+    RUST_APPID, STEAM_GETSERVERLIST_URL, STEAM_GETUSERSTATS_URL,
+    STEAM_GETPLAYERSUMMARIES_URL, STEAM_RESOLVEVANITY_URL,
+    BATTLEMETRICS_URL, BATTLEMETRICS_PLAYER_URL, BM_TOKEN, BM_BREAKER_FAILS,
+    BM_BREAKER_COOLDOWN, BM_USER_AGENT, RUST_STATS_CACHE_TTL,
+    PRESENCE_POLL_SEC, REGION_TO_COUNTRIES, BROWSE_MASTER_LIMIT,
+    STEAM_REGION_ALL, REGION_BYTES, COOKIE_NAME,
 )
-
-ADMIN_STEAMIDS   = set(
-    s.strip() for s in (_env("RM_ADMIN_STEAMIDS", "") or "").split(",") if s.strip()
+from rm_a2s import query_a2s  # noqa: F401
+from rm_rust import (  # noqa: F401
+    parse_rust_keywords, detect_rust_tier, detect_rust_category,
+    detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
+    next_wipe_estimate, _REGION_FILTER_ALIASES, _REGION_GROUPS,
 )
-STEAM_API_KEY    = _env("RM_STEAM_API_KEY", "") or None
-SESSION_TTL      = _env("RM_SESSION_TTL", 30 * 86400, int)
-POLL_INTERVAL    = _env("RM_POLL_INTERVAL_SEC", 20, int)
-A2S_TIMEOUT      = _env("RM_A2S_TIMEOUT_SEC", 3.0, float)
-SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)
-
-BROWSE_CACHE_TTL = _env("RM_BROWSE_CACHE_TTL", 180, int)
-BROWSE_PARALLEL  = _env("RM_BROWSE_PARALLEL", 80, int)
-BROWSE_TIMEOUT   = _env("RM_BROWSE_A2S_TIMEOUT", 2.5, float)
-
-RL_BROWSE_PER_H  = _env("RM_RL_BROWSE_PER_HOUR", 12, int)
-RL_REQ_PER_MIN   = _env("RM_RL_REQUESTS_PER_MIN", 120, int)
-
-# Caddy-Access-Log Pfad (für /admin/stats Page). Auf nicht-existierende Datei
-# fällt der Parser still zurück auf "log unavailable".
-CADDY_LOG_PATH   = _env("RM_CADDY_LOG", "/var/log/caddy/rustmetrics.log")
-CADDY_LOG_MAX_BYTES = _env("RM_CADDY_LOG_MAX_BYTES", 5 * 1024 * 1024, int)  # nur die letzten 5 MB lesen
-
-ROOT             = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR       = os.path.join(ROOT, "static")
-TEMPLATES_DIR    = os.path.join(ROOT, "templates")
-
-RUST_APPID       = 252490
-# Valve hat den Public-Master-Server Q4-2025 abgeschaltet (DNS NXDOMAIN, IPs tot).
-# Wir benutzen jetzt einen Hybrid-Stack:
-#   1. Steam Web API (IGameServersService/GetServerList) — wenn RM_STEAM_API_KEY gesetzt
-#   2. BattleMetrics Public API als Fallback — ohne Key, rate-limited
-STEAM_GETSERVERLIST_URL = "https://api.steampowered.com/IGameServersService/GetServerList/v1/"
-STEAM_GETUSERSTATS_URL  = "https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v2/"
-BATTLEMETRICS_URL       = "https://api.battlemetrics.com/servers"
-BATTLEMETRICS_PLAYER_URL = "https://api.battlemetrics.com/players"
-
-# Cache-TTL für Rust-Stats (Steam-Counter ändern sich langsam, 1h reicht für Live-Page).
-RUST_STATS_CACHE_TTL = _env("RM_RUST_STATS_CACHE_TTL", 3600, int)
-
-# Region-Mapping für BM (BM filtert nach ISO-Ländercodes statt Steam-Region-Bytes)
-REGION_TO_COUNTRIES = {
-    "eu":   "DE,FR,NL,GB,CH,AT,SE,FI,NO,PL,IT,ES,IE,DK,BE,CZ,HU,PT,RO",
-    "us-e": "US",  # BM differenziert nicht E/W
-    "us-w": "US",
-    "sa":   "BR,AR,CL,UY,CO,PE,MX",
-    "asia": "JP,KR,HK,SG,TW,TH,VN,ID,MY",
-    "au":   "AU,NZ",
-    "me":   "AE,SA,IL,TR",
-    "af":   "ZA",
-}
-# Wie viele Server wir maximal vom Master holen. Rust hat ~9'000-10'000
-# registrierte Server; GetServerList hat KEINE Pagination, keinen Sort-Param
-# und liefert in Valves interner (quasi-willkuerlicher) Reihenfolge.
-# Ein zu kleines Limit ergibt also einen zufaelligen Teil-Slice — grosse
-# Netzwerke (Moose, Rustafied, Facepunch-Officials) fehlen dann einfach
-# und die Suche findet sie nie, weil sie nur den Cache filtert.
-# 20000 holt die komplette Liste in einem Call (~3-5 MB JSON).
-BROWSE_MASTER_LIMIT = _env("RM_BROWSE_MASTER_LIMIT", 20000, int)
-REGION_BYTES     = {
-    "all": 0xFF, "us-e": 0x00, "us-w": 0x01, "sa": 0x02,
-    "eu":  0x03, "asia": 0x04, "au":  0x05, "me": 0x06, "af": 0x07,
-}
-COOKIE_NAME      = "rm_session"
-
-A2S_HEADER             = b"\xFF\xFF\xFF\xFF"
-A2S_INFO_REQUEST       = A2S_HEADER + b"TSource Engine Query\x00"
-A2S_PLAYER_REQHDR      = b"\x55"
-A2S_CHALLENGE_TYPE     = b"\x41"
+from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  A2S — Steam Server Query Protocol  (unverändert ggü. lokaler Version)
-# ═══════════════════════════════════════════════════════════════════════════
+_bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False}
+_bm_lock  = threading.Lock()
 
-def _read_cstring(data: bytes, pos: int) -> tuple[str, int]:
-    end = data.index(b"\x00", pos)
-    return data[pos:end].decode("utf-8", errors="replace"), end + 1
+def bm_available() -> bool:
+    with _bm_lock:
+        return time.time() >= _bm_state["blocked_until"]
 
+def _bm_note_result(ok: bool, code: int | None = None) -> None:
+    with _bm_lock:
+        if ok:
+            _bm_state["fails"] = 0
+            _bm_state["logged"] = False
+            return
+        if code in (401, 403):
+            _bm_state["fails"] += 1
+            if _bm_state["fails"] >= BM_BREAKER_FAILS:
+                _bm_state["blocked_until"] = time.time() + BM_BREAKER_COOLDOWN
+                if not _bm_state["logged"]:
+                    _bm_state["logged"] = True
+                    print(f"[battlemetrics] API verweigert (HTTP {code}) — Abo noetig. "
+                          f"Fallback fuer {BM_BREAKER_COOLDOWN//3600}h deaktiviert. "
+                          f"Mit RM_BM_TOKEN reaktivierbar.", file=sys.stderr, flush=True)
 
-def query_a2s(host: str, port: int, timeout: float = None) -> dict:
-    if timeout is None: timeout = A2S_TIMEOUT
-    result = {"host": host, "port": port, "online": False, "queried_at": int(time.time())}
+def bm_get(url: str, timeout: float = 10.0):
+    """Einziger Weg zu BattleMetrics — mit Token, Schutzschalter und Logging."""
+    if not bm_available():
+        raise RuntimeError("battlemetrics disabled (breaker open)")
+    headers = {"User-Agent": BM_USER_AGENT, "Accept": "application/json"}
+    if BM_TOKEN:
+        headers["Authorization"] = f"Bearer {BM_TOKEN}"
+    req = urllib.request.Request(url, headers=headers)
     try:
-        addr = (host, port)
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.settimeout(timeout)
-            t0 = time.time()
-            s.sendto(A2S_INFO_REQUEST, addr)
-            data, _ = s.recvfrom(2048)
-            if len(data) >= 5 and data[4:5] == A2S_CHALLENGE_TYPE:
-                challenge = data[5:9]
-                s.sendto(A2S_INFO_REQUEST + challenge, addr)
-                data, _ = s.recvfrom(2048)
-            result["ping_ms"] = int((time.time() - t0) * 1000)
-            result.update(_parse_a2s_info(data))
-            result["online"] = True
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.settimeout(timeout)
-                s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + b"\xFF\xFF\xFF\xFF", addr)
-                data, _ = s.recvfrom(4096)
-                if len(data) >= 5 and data[4:5] == A2S_CHALLENGE_TYPE:
-                    challenge = data[5:9]
-                    s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + challenge, addr)
-                    data, _ = s.recvfrom(8192)
-                if data[:4] == b"\xFE\xFF\xFF\xFF":
-                    result["players_list"] = []
-                else:
-                    result["players_list"] = _parse_a2s_players(data)
-        except Exception as e:
-            result["players_list"] = []
-            result["players_error"] = f"{type(e).__name__}: {e}"
-    except socket.timeout:
-        result["error"] = "timeout"
-    except OSError as e:
-        result["error"] = f"OSError: {e}"
-    except Exception as e:
-        result["error"] = f"{type(e).__name__}: {e}"
-    return result
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        _bm_note_result(True)
+        return data
+    except urllib.error.HTTPError as e:
+        _bm_note_result(False, e.code)
+        raise
+    except Exception:
+        _bm_note_result(False)
+        raise
 
-
-def _parse_a2s_info(data: bytes) -> dict:
-    if len(data) < 6 or data[4:5] != b"I":
-        return {}
-    pos = 5
-    protocol = data[pos]; pos += 1
-    name, pos    = _read_cstring(data, pos)
-    mapname, pos = _read_cstring(data, pos)
-    folder, pos  = _read_cstring(data, pos)
-    game, pos    = _read_cstring(data, pos)
-    app_id = struct.unpack_from("<H", data, pos)[0]; pos += 2
-    players = data[pos]; pos += 1
-    max_players = data[pos]; pos += 1
-    bots = data[pos]; pos += 1
-    server_type = chr(data[pos]); pos += 1
-    environment = chr(data[pos]); pos += 1
-    visibility = data[pos]; pos += 1
-    vac = data[pos]; pos += 1
-    version, pos = _read_cstring(data, pos)
-    keywords, gameid = "", 0
-    if pos < len(data):
-        edf = data[pos]; pos += 1
-        if edf & 0x80: pos += 2
-        if edf & 0x10: pos += 8
-        if edf & 0x40:
-            pos += 2
-            _, pos = _read_cstring(data, pos)
-        if edf & 0x20: keywords, pos = _read_cstring(data, pos)
-        if edf & 0x01:
-            gameid = struct.unpack_from("<Q", data, pos)[0]; pos += 8
-    return {
-        "protocol": protocol, "name": name, "map": mapname,
-        "folder": folder, "game": game, "app_id": app_id,
-        "players_count": players, "max_players": max_players, "bots": bots,
-        "server_type": server_type, "environment": environment,
-        "visibility": visibility, "vac": vac, "version": version,
-        "keywords": keywords, "gameid": gameid,
-    }
-
-
-def _parse_a2s_players(data: bytes) -> list[dict]:
-    if len(data) < 6 or data[4:5] != b"D":
-        return []
-    count = data[5]; pos = 6
-    out = []
-    for _ in range(count):
-        if pos >= len(data): break
-        try:
-            _idx = data[pos]; pos += 1
-            name, pos = _read_cstring(data, pos)
-            score    = struct.unpack_from("<i", data, pos)[0]; pos += 4
-            duration = struct.unpack_from("<f", data, pos)[0]; pos += 4
-            out.append({"name": name, "score": score, "duration_s": int(duration)})
-        except Exception:
-            break
-    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -241,7 +108,7 @@ def _parse_a2s_players(data: bytes) -> list[dict]:
 #  ersetzen ihn.
 # ═══════════════════════════════════════════════════════════════════════════
 
-def query_steam_web_api(region: int = 0xFF, limit: int = BROWSE_MASTER_LIMIT) -> list[dict]:
+def query_steam_web_api(region: int = STEAM_REGION_ALL, limit: int = BROWSE_MASTER_LIMIT) -> list[dict]:
     """
     IGameServersService/GetServerList — Steam Web API.
     Liefert komplette Server-Daten in einem HTTPS-Call, kein separates A2S nötig.
@@ -251,7 +118,7 @@ def query_steam_web_api(region: int = 0xFF, limit: int = BROWSE_MASTER_LIMIT) ->
     if not STEAM_API_KEY:
         return []
     filter_parts = [rf"\appid\{RUST_APPID}", r"\dedicated\1"]
-    if region != 0xFF:
+    if region != STEAM_REGION_ALL:
         filter_parts.append(rf"\region\{region}")
     params = {"key": STEAM_API_KEY, "filter": "".join(filter_parts), "limit": str(limit)}
     url = STEAM_GETSERVERLIST_URL + "?" + urllib.parse.urlencode(params)
@@ -291,6 +158,8 @@ def query_battlemetrics(region: str = "all", limit: int = BROWSE_MASTER_LIMIT) -
     Public BattleMetrics-API als Fallback. Rate-limited (~60 req/min unauth),
     aber kein Key nötig. Attribution-Pflicht bei produktivem Einsatz.
     """
+    if not bm_available():
+        return []
     fetched: list[dict] = []
     page_size = 100  # BM-Max pro Page
     base_params = {
@@ -302,14 +171,13 @@ def query_battlemetrics(region: str = "all", limit: int = BROWSE_MASTER_LIMIT) -
     if region != "all" and region in REGION_TO_COUNTRIES:
         base_params["filter[countries]"] = REGION_TO_COUNTRIES[region]
     url = BATTLEMETRICS_URL + "?" + urllib.parse.urlencode(base_params)
+    # So viele Pages wie das Limit verlangt, gedeckelt durch BROWSE_BM_MAX_PAGES
+    max_pages = min(BROWSE_BM_MAX_PAGES, -(-limit // page_size))  # ceil-div
     pages = 0
-    while url and len(fetched) < limit and pages < 8:
+    while url and len(fetched) < limit and pages < max_pages:
         pages += 1
         try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "RustMetrics/1.0 (+https://rustmetrics.eu)"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                payload = json.loads(r.read().decode("utf-8"))
+            payload = bm_get(url, timeout=10)
         except Exception as e:
             print(f"[battlemetrics] page {pages} error: {e}", file=sys.stderr, flush=True)
             break
@@ -349,7 +217,7 @@ def fetch_server_list(region: str = "all", limit: int = BROWSE_MASTER_LIMIT) -> 
     Fallback in beide Richtungen falls die primäre Quelle leer kommt.
     """
     if region == "all" and STEAM_API_KEY:
-        servers = query_steam_web_api(region=0xFF, limit=limit)
+        servers = query_steam_web_api(region=STEAM_REGION_ALL, limit=limit)
         if servers:
             return servers, "steam_web_api"
         print("[fetch] Steam Web API leer, falle zurück auf BattleMetrics", file=sys.stderr, flush=True)
@@ -358,10 +226,148 @@ def fetch_server_list(region: str = "all", limit: int = BROWSE_MASTER_LIMIT) -> 
         return servers, "battlemetrics"
     # Notfall: wenn BM auch leer und Steam noch nicht versucht
     if STEAM_API_KEY:
-        servers = query_steam_web_api(region=0xFF, limit=limit)
+        servers = query_steam_web_api(region=STEAM_REGION_ALL, limit=limit)
         if servers:
             return servers, "steam_web_api"
     return [], "none"
+
+
+# ── Steam-Presence: Spieler per SteamID64 tracken ──────────────────────────
+# Umgeht server.censorplayerlist (Streamer-Mode auf Facepunch-Officials):
+# statt Namen in der (zensierten) A2S-Player-List zu suchen, fragen wir Steam
+# direkt, ob der Spieler Rust spielt und auf welchem Server (gameserverip).
+# Voraussetzung: Das Steam-Profil hat "Spieldetails: öffentlich".
+
+_STEAMID64_RE    = re.compile(r"^7656\d{13}$")
+_PROFILE_URL_RE  = re.compile(r"steamcommunity\.com/(profiles|id)/([^/?#]+)", re.I)
+
+def resolve_vanity_url(vanity: str) -> int | None:
+    """ResolveVanityURL: Custom-Profil-Name → SteamID64 (None wenn unbekannt)."""
+    if not STEAM_API_KEY: return None
+    params = {"key": STEAM_API_KEY, "vanityurl": vanity}
+    try:
+        with urllib.request.urlopen(
+                STEAM_RESOLVEVANITY_URL + "?" + urllib.parse.urlencode(params),
+                timeout=10) as r:
+            resp = json.loads(r.read().decode("utf-8")).get("response", {})
+        if resp.get("success") == 1:
+            return int(resp["steamid"])
+    except Exception as e:
+        print(f"[steam_vanity] {vanity}: {e}", file=sys.stderr, flush=True)
+    return None
+
+def parse_steam_player_input(raw: str) -> int | None:
+    """
+    Erkennt SteamID64 oder steamcommunity-Profil-URL im Add-Watch-Input.
+    Liefert die SteamID64 oder None (= normaler Spielername).
+    """
+    s = (raw or "").strip()
+    if _STEAMID64_RE.match(s):
+        return int(s)
+    m = _PROFILE_URL_RE.search(s)
+    if m:
+        kind, val = m.group(1).lower(), m.group(2)
+        if kind == "profiles" and _STEAMID64_RE.match(val):
+            return int(val)
+        if kind == "id":
+            return resolve_vanity_url(val)
+    return None
+
+STEAM_GETFRIENDLIST_URL = "https://api.steampowered.com/ISteamUser/GetFriendList/v1/"
+
+def fetch_friend_list(steam_id: int) -> list[int]:
+    """
+    Steam-Freundesliste. Geht nur, wenn der Nutzer seine Freundesliste
+    oeffentlich hat — sonst 401/403, dann leere Liste.
+    """
+    if not STEAM_API_KEY:
+        return []
+    params = {"key": STEAM_API_KEY, "steamid": str(steam_id), "relationship": "friend"}
+    try:
+        with urllib.request.urlopen(
+                STEAM_GETFRIENDLIST_URL + "?" + urllib.parse.urlencode(params),
+                timeout=12) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return [int(f["steamid"]) for f in data.get("friendslist", {}).get("friends", [])]
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return []                     # Freundesliste privat — kein Fehlerfall
+        print(f"[steam_friends] {steam_id}: HTTP {e.code}", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[steam_friends] {steam_id}: {e}", file=sys.stderr, flush=True)
+    return []
+
+
+def api_friends_in_rust(user_id: int) -> dict:
+    """
+    Freunde des eingeloggten Nutzers, die GERADE Rust spielen — inkl. Server,
+    und ob dieser Server schon auf seiner Watchlist steht.
+    """
+    friends = fetch_friend_list(user_id)
+    if not friends:
+        return {"available": False, "reason": "friends list private or empty",
+                "friends": [], "total_friends": 0}
+    sums = fetch_player_summaries(friends)
+    playing = []
+    for sid, p in sums.items():
+        if str(p.get("gameid") or "") != str(RUST_APPID):
+            continue
+        addr = p.get("gameserverip")
+        playing.append({
+            "steam_id": str(sid),
+            "persona":  p.get("personaname") or str(sid),
+            "avatar":   p.get("avatar"),
+            "server_addr": addr,
+            "server_ip":   presence_ip(addr),
+        })
+    playing.sort(key=lambda x: (x["persona"] or "").lower())
+
+    # Servernamen und Watchlist-Status anreichern
+    ips = [f["server_ip"] for f in playing if f["server_ip"]]
+    known: dict[str, dict] = {}
+    if ips:
+        with _Conn() as (conn, cur):
+            cur.execute(
+                "SELECT s.id, s.host, s.port, s.name, "
+                "  EXISTS(SELECT 1 FROM watched_servers w "
+                "         WHERE w.server_id=s.id AND w.user_id=%s) AS watched "
+                "FROM servers s WHERE s.host = ANY(%s)", (user_id, ips))
+            for r in cur.fetchall():
+                known[r["host"]] = {"server_id": r["id"], "name": r["name"],
+                                    "port": r["port"], "watched": r["watched"]}
+    for f in playing:
+        k = known.get(f["server_ip"] or "")
+        f["server_name"]  = (k or {}).get("name")
+        f["server_id"]    = (k or {}).get("server_id")
+        f["on_watchlist"] = bool((k or {}).get("watched"))
+    return {"available": True, "friends": playing, "total_friends": len(friends),
+            "playing": len(playing)}
+
+
+def fetch_player_summaries(steam_ids: list[int]) -> dict[int, dict]:
+    """
+    ISteamUser/GetPlayerSummaries für bis zu N IDs (Batches à 100).
+    Relevante Felder: personaname, gameid (252490 = Rust), gameserverip,
+    communityvisibilitystate (3 = öffentlich).
+    """
+    out: dict[int, dict] = {}
+    if not STEAM_API_KEY or not steam_ids:
+        return out
+    for i in range(0, len(steam_ids), 100):
+        chunk = steam_ids[i:i+100]
+        params = {"key": STEAM_API_KEY, "steamids": ",".join(str(s) for s in chunk)}
+        try:
+            with urllib.request.urlopen(
+                    STEAM_GETPLAYERSUMMARIES_URL + "?" + urllib.parse.urlencode(params),
+                    timeout=15) as r:
+                players = (json.loads(r.read().decode("utf-8"))
+                           .get("response", {}).get("players", []))
+            for p in players:
+                try: out[int(p["steamid"])] = p
+                except (KeyError, ValueError): pass
+        except Exception as e:
+            print(f"[steam_presence] batch error: {e}", file=sys.stderr, flush=True)
+    return out
 
 
 # ── BattleMetrics per-Server Player-List Fallback ─────────────────────────
@@ -378,17 +384,15 @@ def _bm_search_id(host: str, port: int) -> int | None:
     BM-Search behandelt ':' im search-Term als Text-Token und matcht im Namen.
     Suchen daher nur per IP, dann clientseitig auf Port filtern.
     """
+    if not bm_available():
+        return None
     try:
         url = (BATTLEMETRICS_URL + "?" + urllib.parse.urlencode({
             "filter[game]":    "rust",
             "filter[search]":  host,
             "page[size]":      "10",
         }))
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "RustMetrics/1.0 (+https://rustmetrics.eu)"
-        })
-        with urllib.request.urlopen(req, timeout=8) as r:
-            payload = json.loads(r.read().decode("utf-8"))
+        payload = bm_get(url, timeout=8)
         # Erst exakter IP+Port-Match
         for s in payload.get("data", []):
             a = s.get("attributes") or {}
@@ -422,16 +426,14 @@ def query_bm_server(host: str, port: int) -> tuple[dict | None, list[tuple[int, 
     Holt Server-Daten + Spielerliste von BM.
     Returns (server_attrs, [(bm_player_id, name), …]) — bm_player_id ist 0 wenn nicht parsbar.
     """
+    if not bm_available():
+        return None, []
     bm_id = get_bm_id(host, port)
     if not bm_id:
         return None, []
     try:
         url = f"{BATTLEMETRICS_URL}/{bm_id}?include=player"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "RustMetrics/1.0 (+https://rustmetrics.eu)"
-        })
-        with urllib.request.urlopen(req, timeout=10) as r:
-            payload = json.loads(r.read().decode("utf-8"))
+        payload = bm_get(url, timeout=10)
     except Exception as e:
         print(f"[bm_detail] id={bm_id}: {e}", file=sys.stderr, flush=True)
         return None, []
@@ -458,8 +460,12 @@ def query_a2s_batch(addrs, workers=BROWSE_PARALLEL, timeout=BROWSE_TIMEOUT) -> l
             try:
                 r = fut.result()
                 if r.get("online"): results.append(r)
-            except Exception:
-                pass
+            except Exception as e:
+                # query_a2s faengt Offline/Timeout selbst ab — hier landet nur
+                # Unerwartetes, und das soll sichtbar sein.
+                ip, port = future_map[fut]
+                print(f"[a2s_batch] {ip}:{port} {type(e).__name__}: {e}",
+                      file=sys.stderr, flush=True)
     return results
 
 
@@ -477,118 +483,6 @@ def _cache_get(key, ttl=BROWSE_CACHE_TTL):
 def _cache_put(key, data):
     with _browse_lock:
         _browse_cache[key] = {"ts": time.time(), "data": data}
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Rust-spezifische Helpers
-# ═══════════════════════════════════════════════════════════════════════════
-
-def parse_rust_keywords(kw: str) -> dict:
-    out: dict = {"tags": []}
-    if not kw: return out
-    for part in [p.strip() for p in kw.split(",") if p.strip()]:
-        if   part.startswith("mp"):
-            try: out["max_players_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("cp"):
-            try: out["current_players_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("qp"):
-            try: out["queued_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("v") and part[1:].isdigit():
-            out["version_kw"] = int(part[1:])
-        elif part.startswith("born"):
-            try: out["born_ts"] = int(part[4:])
-            except ValueError: pass
-        elif part.startswith("gm"): out["game_mode"] = part[2:]
-        elif part.startswith("h") and part[1:].isdigit(): out["hash"] = part[1:]
-        elif part == "stok": out["server_tokenized"] = True
-        else: out["tags"].append(part)
-    return out
-
-
-def detect_rust_tier(name, tags) -> str:
-    n = (name or "").lower() + " " + " ".join(tags).lower()
-    if "pve" in n: return "pve"
-    for mult in ("100x","50x","20x","10x","5x","3x","2x"):
-        if mult in n: return mult
-    if "modded" in n or "oxide" in tags: return "modded"
-    if "vanilla" in n: return "vanilla"
-    return "vanilla"
-
-
-def detect_name_anonymization(player_names: list[str]) -> bool:
-    """
-    Erkennt Facepunch-style Name-Randomisierung. Heuristik fingerprintet:
-      - Mehrere Duplikate (im echten Rust ungewöhnlich)
-      - PLUS: hoher Anteil pure-lowercase-alpha-kurze-Namen (Facepunch zieht aus einem
-        Pool von ~500 generischen kleinbuchstabigen Vornamen wie 'carmelo','gena')
-    Beide Bedingungen zusammen sind nötig — Reddit/Stevious-style Server mit echten
-    Mixed-Case-Namen + 1-2 Zufalls-Duplikaten dürfen nicht fälschlich anschlagen.
-    """
-    real_names = [n for n in player_names if (n or "").strip()]
-    if len(real_names) < 15:
-        return False
-    seen = set()
-    dupes = 0
-    lower_alpha = 0
-    for n in real_names:
-        key = n.strip().lower()
-        if key in seen: dupes += 1
-        else: seen.add(key)
-        # "Pure lowercase short alpha" = look like Facepunch's randomized pool entries
-        if 3 <= len(n) <= 12 and n.islower() and n.isalpha():
-            lower_alpha += 1
-    lower_ratio = lower_alpha / len(real_names)
-    # Strenger Filter: ≥3 Duplikate UND ≥70% pure-lowercase-alpha-short
-    return dupes >= 3 and lower_ratio >= 0.70
-
-
-def next_wipe_estimate(born_ts):
-    if not born_ts: return None
-    now = int(time.time())
-    week = 7 * 86400
-    if born_ts > now:
-        return {"last_wipe_ts": born_ts, "next_wipe_estimate_ts": born_ts, "days_until_next": 0}
-    weeks_since = (now - born_ts) // week
-    next_wipe = born_ts + (weeks_since + 1) * week
-    return {
-        "last_wipe_ts": born_ts,
-        "next_wipe_estimate_ts": next_wipe,
-        "days_until_next": max(0, (next_wipe - now) // 86400),
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  POSTGRES — Connection-Pool + Helpers
-# ═══════════════════════════════════════════════════════════════════════════
-
-_pool: psycopg2.pool.ThreadedConnectionPool = None  # type: ignore
-
-def init_pool():
-    global _pool
-    _pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=2, maxconn=20, dsn=PG_DSN
-    )
-
-class _Conn:
-    """Context-Manager: holt Connection aus Pool, gibt sie sicher zurück."""
-    def __init__(self, cursor=True):
-        self._cursor = cursor
-    def __enter__(self):
-        self.conn = _pool.getconn()
-        self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) if self._cursor else None
-        return (self.conn, self.cur) if self._cursor else self.conn
-    def __exit__(self, exc_type, exc, tb):
-        if self.cur:
-            try: self.cur.close()
-            except Exception: pass
-        try:
-            if exc_type is None: self.conn.commit()
-            else: self.conn.rollback()
-        finally:
-            _pool.putconn(self.conn)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -838,6 +732,16 @@ def _user_score_bucket(user_id: int) -> TokenBucket:
     return b
 
 
+# ── Flap-Minigame: Anti-Cheat-Plausibilitaet ──────────────────────────────
+# Jede Pipe braucht ~PIPE_DIST/PIPE_SPD Frames = 220 / 2.3 / 60 ≈ 1.59s.
+# Wir verlangen nur ~1.4s pro Punkt (Faktor < 1 erlaubt 'lucky early pipe',
+# filtert aber Auto-Submit-Cheats), plus Puffer fuer den Spielstart.
+FLAP_MAX_SCORE          = 100_000
+FLAP_MIN_MS_PER_POINT   = 1400
+FLAP_START_BUFFER_MS    = 300
+FLAP_MAX_DURATION_MS    = 12 * 3600 * 1000   # laenger als 12h ist klar Unsinn
+
+
 def submit_game_score(user_id: int, game: str, score: int,
                       duration_ms: int | None) -> tuple[bool, str | None]:
     """Speichert einen Game-Score nach Plausibilitäts-Checks.
@@ -845,17 +749,15 @@ def submit_game_score(user_id: int, game: str, score: int,
     """
     if game not in ("flap",):
         return False, "unknown game"
-    if not isinstance(score, int) or not (0 <= score <= 100000):
+    if not isinstance(score, int) or not (0 <= score <= FLAP_MAX_SCORE):
         return False, "invalid score range"
-    # Game-Duration vs. Score Plausibility: jede Pipe ist ~PIPE_DIST/PIPE_SPD frames
-    # = 220 / 2.3 / 60 ≈ 1.59s, also score * 1.4s minimum erwartet (Faktor < 1 erlaubt
-    # 'lucky early pipe' aber filtert Auto-Cheats). 300ms Buffer fürs Init.
     if duration_ms is not None:
         try: dur = int(duration_ms)
         except (TypeError, ValueError): dur = 0
-        if dur > 0 and score > 0 and dur < (score * 1400 - 300):
+        min_expected_ms = score * FLAP_MIN_MS_PER_POINT - FLAP_START_BUFFER_MS
+        if dur > 0 and score > 0 and dur < min_expected_ms:
             return False, "duration implausibly short for score"
-        if dur > 12 * 3600 * 1000:  # > 12h game session — clearly bogus
+        if dur > FLAP_MAX_DURATION_MS:
             return False, "duration implausibly long"
     # Rate-Limit (eigener Bucket pro User)
     if not _user_score_bucket(user_id).take(1):
@@ -906,11 +808,7 @@ def resolve_steam_id_from_bm(bm_player_id: int) -> int | None:
     """
     try:
         url = f"{BATTLEMETRICS_PLAYER_URL}/{int(bm_player_id)}?include=identifier"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "RustMetrics/1.0 (+https://rustmetrics.eu)"
-        })
-        with urllib.request.urlopen(req, timeout=8) as r:
-            data = json.loads(r.read().decode("utf-8"))
+        data = bm_get(url, timeout=8)
     except Exception as e:
         print(f"[bm_steamid] {bm_player_id}: {e}", file=sys.stderr, flush=True)
         return None
@@ -1119,8 +1017,8 @@ def render_wipes_ics(user_id: int) -> str:
                 desc_lines = [
                     f"Server: {srv_label}",
                     f"Address: {s['host']}:{s['port']}",
-                    f"Estimated wipe time (based on weekly cycle from last known wipe).",
-                    f"",
+                    "Estimated wipe time (based on weekly cycle from last known wipe).",
+                    "",
                     f"View: https://rustmetrics.eu/server/{s['host']}:{s['port']}",
                 ]
                 out.extend([
@@ -1207,6 +1105,17 @@ _poller_stop = threading.Event()
 
 def _store_snapshot(cur, server_id: int, q: dict) -> None:
     players = q.get("players_list", []) or []
+    names_json = json.dumps([p.get("name", "") for p in players])
+    # Die Spielerliste aendert sich zwischen zwei Polls meistens nicht, macht
+    # aber den Grossteil des Snapshot-Volumens aus. Nur bei Aenderung schreiben
+    # (_latest_snapshot und _names_at holen die letzte bekannte Liste nach).
+    if players:
+        cur.execute(
+            "SELECT players_json FROM snapshots WHERE server_id=%s "
+            "AND players_json IS NOT NULL ORDER BY ts DESC LIMIT 1", (server_id,))
+        prev = cur.fetchone()
+        if prev and prev["players_json"] == names_json:
+            names_json = None
     cur.execute(
         "INSERT INTO snapshots "
         "(server_id, ts, online, name, map, players_count, max_players, "
@@ -1219,7 +1128,7 @@ def _store_snapshot(cur, server_id: int, q: dict) -> None:
             q.get("name"), q.get("map"),
             q.get("players_count"), q.get("max_players"),
             q.get("ping_ms"), q.get("keywords"),
-            json.dumps([p.get("name", "") for p in players]),
+            names_json,
             q.get("error"),
         ),
     )
@@ -1478,6 +1387,18 @@ def poll_server_row(row: dict) -> dict:
 def _cleanup_old(cur):
     cutoff = int(time.time()) - SNAPSHOT_TTL_DAY * 86400
     cur.execute("DELETE FROM snapshots WHERE ts < %s", (cutoff,))
+    # Namensliste aus alten Snapshots entfernen: sie macht ~80% des Volumens
+    # aus, wird aber nach ein paar Stunden von nichts mehr gebraucht — der
+    # Populationsgraph braucht nur ts/players_count, und wer wann da war
+    # steht in player_sessions. Batchweise, damit kein langer Lock entsteht.
+    pj_cut = int(time.time()) - PLAYERS_JSON_KEEP_H * 3600
+    for _ in range(20):
+        cur.execute(
+            "UPDATE snapshots SET players_json = NULL WHERE ctid IN ("
+            "  SELECT ctid FROM snapshots WHERE ts < %s AND players_json IS NOT NULL"
+            "  LIMIT 20000)", (pj_cut,))
+        if cur.rowcount < 20000:
+            break
     cur.execute("DELETE FROM player_sessions WHERE end_ts IS NOT NULL AND end_ts < %s", (cutoff,))
     cur.execute("DELETE FROM sessions WHERE expires_at < %s", (int(time.time()),))
     # Verwaiste Server löschen (die niemand mehr watcht und seit 7+ Tagen keine Snapshots)
@@ -1488,21 +1409,276 @@ def _cleanup_old(cur):
     )
 
 
+def presence_ip(addr: str | None) -> str | None:
+    """
+    'ip:port' → 'ip'. WICHTIG: Steam liefert in gameserverip den GAME-Port
+    (z.B. 28055), unsere servers-Tabelle speichert den QUERY-Port (z.B. 28015).
+    Die Ports stimmen also systematisch NICHT überein — gematcht wird auf der
+    IP. Ein Rust-Server bedient ohnehin genau eine Instanz pro IP-Slot.
+    """
+    if not addr: return None
+    return addr.rsplit(":", 1)[0] if ":" in addr else addr
+
+
+def presence_transition(old: dict | None, in_rust: bool, server_addr: str | None) -> str | None:
+    """
+    Entscheidet, ob ein Presence-Wechsel gemeldet werden muss.
+    Rückgabe: None (nichts), "online", "offline" oder "switch" (Serverwechsel).
+    Erstbeobachtung (old is None) meldet NIE — sonst würde jeder neu getrackte
+    Spieler sofort eine Benachrichtigung auslösen.
+    """
+    if old is None:
+        return None
+    was_in   = bool(old.get("in_rust"))
+    old_ip   = presence_ip(old.get("server_addr"))
+    new_ip   = presence_ip(server_addr)
+    if in_rust and not was_in:
+        return "online"
+    if was_in and not in_rust:
+        return "offline"
+    if in_rust and was_in and new_ip and old_ip and new_ip != old_ip:
+        return "switch"
+    return None
+
+
+# ── Alias-Lernen: den zensierten Namen eines Spielers herausfinden ────────
+# Auf Servern mit censorplayerlist sind die Namen zwar Platzhalter, aber sie
+# sind stabil an den Account gebunden (gemessen: 240/243 Namen ueber 5 Minuten
+# identisch, verschiedene Server ueberschneiden sich nur zufaellig).
+# Die Zuordnung ist nicht berechenbar — aber beobachtbar: Steam sagt uns
+# sekundengenau, wann ein Account einen Server betritt oder verlaesst. Genau
+# dann taucht sein Platzhalter in der A2S-Liste auf bzw. verschwindet.
+# Ueber mehrere solcher Ereignisse bleibt genau ein Name uebrig.
+
+# Wie viele Join/Leave-Ereignisse noetig sind, bis ein Alias als sicher gilt.
+# Gerechnet (Liste ~245 Namen, bis zu 10 Kandidaten pro Ereignis):
+#   2 Ereignisse -> bis 33% Falsch-Positiv | 3 -> 1.7% | 4 -> 0.07%
+# Darum 3 als Minimum und Kandidaten pro Ereignis hart auf 10 begrenzt.
+ALIAS_MIN_EVENTS  = _env("RM_ALIAS_MIN_EVENTS", 3, int)
+ALIAS_MAX_CANDS   = _env("RM_ALIAS_MAX_CANDS", 10, int)
+
+def _names_at(cur, server_id: int, ts: int, after: bool) -> set[str]:
+    """Namensmenge des Snapshots direkt vor bzw. nach einem Zeitpunkt."""
+    if after:
+        cur.execute("SELECT players_json FROM snapshots WHERE server_id=%s AND ts > %s "
+                    "AND online AND players_json IS NOT NULL ORDER BY ts ASC LIMIT 1",
+                    (server_id, ts))
+    else:
+        cur.execute("SELECT players_json FROM snapshots WHERE server_id=%s AND ts <= %s "
+                    "AND online AND players_json IS NOT NULL ORDER BY ts DESC LIMIT 1",
+                    (server_id, ts))
+    r = cur.fetchone()
+    if not r or not r["players_json"]:
+        return set()
+    try:
+        return set(n.lower() for n in json.loads(r["players_json"]) if n)
+    except Exception as e:
+        # Korruptes players_json in der DB — leise leer zurueckgeben waere ein
+        # falsches "keine Spieler" fuers Session-Diffing, also mindestens loggen.
+        print(f"[names_at] korruptes players_json server={server_id} ts={ts}: "
+              f"{type(e).__name__}: {e}", file=sys.stderr, flush=True)
+        return set()
+
+
+def learn_alias(cur, steam_id: int, server_id: int, ts: int, event: str) -> None:
+    """
+    Wertet ein Join-/Leave-Ereignis aus: welche Namen kamen genau dann dazu
+    (bzw. fielen weg)? Jeder Kandidat bekommt einen Punkt, die Ereigniszahl
+    steigt. Der echte Alias ist der einzige, der bei JEDEM Ereignis dabei ist.
+    """
+    before = _names_at(cur, server_id, ts, after=False)
+    after  = _names_at(cur, server_id, ts, after=True)
+    if not before or not after:
+        return
+    cands = (after - before) if event == "online" else (before - after)
+    # Zu viele gleichzeitige Wechsel -> das Ereignis trennt schlecht, verwerfen
+    if not cands or len(cands) > ALIAS_MAX_CANDS:
+        return
+    cur.execute("UPDATE alias_candidates SET events = events + 1 "
+                "WHERE steam_id=%s AND server_id=%s", (steam_id, server_id))
+    for name in cands:
+        cur.execute(
+            "INSERT INTO alias_candidates (steam_id, server_id, alias, score, events, "
+            " first_seen, last_seen) VALUES (%s,%s,%s,1,1,%s,%s) "
+            "ON CONFLICT (steam_id, server_id, alias) DO UPDATE SET "
+            " score = alias_candidates.score + 1, last_seen = EXCLUDED.last_seen",
+            (steam_id, server_id, name, ts, ts))
+    print(f"[alias] {event} steam={steam_id} server={server_id}: {len(cands)} Kandidat(en)",
+          flush=True)
+
+
+def confirmed_alias(cur, steam_id: int, server_id: int) -> str | None:
+    """
+    Bestaetigt, wenn genau ein Kandidat bei allen Ereignissen dabei war und
+    es mindestens ALIAS_MIN_EVENTS Ereignisse gab.
+    """
+    cur.execute(
+        "SELECT alias, score, events FROM alias_candidates "
+        "WHERE steam_id=%s AND server_id=%s ORDER BY score DESC LIMIT 2",
+        (steam_id, server_id))
+    rows = cur.fetchall()
+    if not rows:
+        return None
+    top = rows[0]
+    if top["events"] < ALIAS_MIN_EVENTS or top["score"] < top["events"]:
+        return None
+    if len(rows) > 1 and rows[1]["score"] >= top["score"]:
+        return None                      # nicht eindeutig
+    return top["alias"]
+
+
+def _server_id_for_ip(cur, ip: str | None) -> int | None:
+    """IP → server_id (Port ignorieren, siehe presence_ip)."""
+    if not ip: return None
+    cur.execute("SELECT id FROM servers WHERE host=%s ORDER BY id LIMIT 1", (ip,))
+    r = cur.fetchone()
+    return int(r["id"]) if r else None
+
+
+def _presence_server_name(cur, server_addr: str) -> str:
+    """host:port → hübscher Servername falls bei uns bekannt, sonst die Adresse."""
+    if not server_addr: return "unknown server"
+    ip = presence_ip(server_addr)
+    try:
+        cur.execute("SELECT name FROM servers WHERE host=%s AND name IS NOT NULL "
+                    "ORDER BY id LIMIT 1", (ip,))
+        r = cur.fetchone()
+        if r and r["name"]: return r["name"]
+    except Exception as e:
+        # DB-Fehler beim Namens-Lookup: Fallback auf die Adresse ist ok,
+        # aber der Fehler selbst darf nicht unsichtbar bleiben.
+        print(f"[presence_server_name] DB-Lookup fehlgeschlagen fuer {server_addr}: "
+              f"{type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    return server_addr
+
+
+def _notify_steam_presence(cur, steam_id: int, persona: str,
+                           in_rust: bool, server_addr: str | None,
+                           server_name: str) -> None:
+    """Discord-Webhooks aller User feuern, die diese SteamID watchen."""
+    col = "notify_online" if in_rust else "notify_offline"
+    cur.execute(
+        f"SELECT DISTINCT u.discord_webhook FROM watched_players wp "
+        f"JOIN users u ON u.id = wp.user_id "
+        f"WHERE wp.steam_id=%s AND u.discord_webhook IS NOT NULL AND u.{col}=TRUE",
+        (steam_id,))
+    label = f"{persona} [steam]" if persona else str(steam_id)
+    for row in cur.fetchall():
+        embed = _make_player_embed("online" if in_rust else "offline",
+                                   label, server_name)
+        fire_discord_webhook_async(row["discord_webhook"], embed)
+
+
+def steam_presence_loop():
+    """
+    Pollt Steam-Presence für alle per SteamID gewatchten Spieler.
+    Erkennt online/offline/Serverwechsel unabhängig von censorplayerlist.
+    """
+    if not STEAM_API_KEY:
+        print("[presence] kein RM_STEAM_API_KEY — Presence-Tracking aus", flush=True)
+        return
+    print("[presence] gestartet", flush=True)
+    while not _poller_stop.is_set():
+        try:
+            with _Conn() as (conn, cur):
+                cur.execute("SELECT DISTINCT steam_id FROM watched_players "
+                            "WHERE steam_id IS NOT NULL")
+                ids = [int(r["steam_id"]) for r in cur.fetchall()]
+            if ids:
+                summaries = fetch_player_summaries(ids)
+                now = int(time.time())
+                with _Conn() as (conn, cur):
+                    cur.execute("SELECT * FROM steam_presence WHERE steam_id = ANY(%s)",
+                                (ids,))
+                    old = {int(r["steam_id"]): dict(r) for r in cur.fetchall()}
+                    for sid64 in ids:
+                        s = summaries.get(sid64)
+                        if s is None:
+                            continue  # Batch-Fehler / ID nicht geliefert → Status halten
+                        in_rust     = str(s.get("gameid") or "") == str(RUST_APPID)
+                        server_addr = s.get("gameserverip") if in_rust else None
+                        # 'visible' = Profil öffentlich genug, dass Spieldetails kommen
+                        # KÖNNTEN. Bei privaten Spieldetails fehlt gameid auch beim
+                        # Spielen — dann können wir nur "nicht sichtbar" sagen.
+                        visible = s.get("communityvisibilitystate") == 3
+                        persona = s.get("personaname")
+                        o = old.get(sid64)
+                        cur.execute(
+                            "INSERT INTO steam_presence "
+                            " (steam_id, persona, visible, in_rust, server_addr, updated_at) "
+                            "VALUES (%s,%s,%s,%s,%s,%s) "
+                            "ON CONFLICT (steam_id) DO UPDATE SET "
+                            " persona=EXCLUDED.persona, visible=EXCLUDED.visible, "
+                            " in_rust=EXCLUDED.in_rust, server_addr=EXCLUDED.server_addr, "
+                            " updated_at=EXCLUDED.updated_at",
+                            (sid64, persona, visible, in_rust, server_addr, now))
+                        event = presence_transition(o, in_rust, server_addr)
+                        if event:
+                            was_addr = o.get("server_addr") if o else None
+                            sname = _presence_server_name(
+                                cur, server_addr or was_addr or "")
+                            _notify_steam_presence(cur, sid64, persona,
+                                                   in_rust, server_addr, sname)
+                            # Alias-Lernen: Join/Leave sind die einzigen Momente,
+                            # in denen sich ein Platzhalter eindeutig zuordnen laesst.
+                            try:
+                                if event in ("online", "offline"):
+                                    addr = server_addr if event == "online" else was_addr
+                                    sid_row = _server_id_for_ip(cur, presence_ip(addr))
+                                    if sid_row:
+                                        learn_alias(cur, sid64, sid_row, now, event)
+                                elif event == "switch":
+                                    old_sid = _server_id_for_ip(cur, presence_ip(was_addr))
+                                    new_sid = _server_id_for_ip(cur, presence_ip(server_addr))
+                                    if old_sid: learn_alias(cur, sid64, old_sid, now, "offline")
+                                    if new_sid: learn_alias(cur, sid64, new_sid, now, "online")
+                            except Exception as e:
+                                print(f"[alias] Fehler: {type(e).__name__}: {e}",
+                                      file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[presence] loop error: {e}", file=sys.stderr, flush=True)
+        _poller_stop.wait(PRESENCE_POLL_SEC)
+
+
+# Fester Worker-Pool statt "ein Thread pro Server pro Runde". Verhindert
+# Thread-Explosion und Erschoepfung des DB-Pools, wenn viele Server beobachtet
+# werden (vorher: 500 Server = 500 gleichzeitige Threads + 500 DB-Connections).
+POLL_WORKERS = _env("RM_POLL_WORKERS", 16, int)
+_poll_pool = ThreadPoolExecutor(max_workers=POLL_WORKERS, thread_name_prefix="poll")
+_poll_stats = {"ok": 0, "err": 0}
+
+def _poll_guarded(row: dict) -> None:
+    """poll_server_row mit Fehlerfang — sonst stirbt der Worker still."""
+    try:
+        poll_server_row(row)
+        _poll_stats["ok"] += 1
+    except Exception as e:
+        _poll_stats["err"] += 1
+        print(f"[poller] {row.get('host')}:{row.get('port')} {type(e).__name__}: {e}",
+              file=sys.stderr, flush=True)
+
+
 def poller_loop():
-    print("[poller] gestartet", flush=True)
+    print(f"[poller] gestartet ({POLL_WORKERS} worker)", flush=True)
     last_cleanup = 0.0
     while not _poller_stop.is_set():
         try:
             with _Conn() as (conn, cur):
                 cur.execute("SELECT id, host, port FROM v_active_servers")
                 rows = [dict(r) for r in cur.fetchall()]
-            threads = []
-            for r in rows:
-                t = threading.Thread(target=poll_server_row, args=(r,), daemon=True)
-                t.start()
-                threads.append(t)
-            for t in threads:
-                t.join(timeout=A2S_TIMEOUT * 2 + 1)
+            _poll_stats["ok"] = _poll_stats["err"] = 0
+            futs = [_poll_pool.submit(_poll_guarded, r) for r in rows]
+            deadline = max(5, POLL_INTERVAL - 2)
+            try:
+                for _f in as_completed(futs, timeout=deadline):
+                    pass
+            except _FuturesTimeout:
+                pending = sum(1 for f in futs if not f.done())
+                print(f"[poller] {pending}/{len(futs)} Server nach {deadline}s noch offen",
+                      file=sys.stderr, flush=True)
+            if _poll_stats["err"]:
+                print(f"[poller] Runde: {_poll_stats['ok']} ok, {_poll_stats['err']} Fehler",
+                      file=sys.stderr, flush=True)
             if time.time() - last_cleanup > 3600:
                 with _Conn() as (conn, cur):
                     _cleanup_old(cur)
@@ -1523,7 +1699,20 @@ def _latest_snapshot(cur, server_id: int):
         "SELECT * FROM snapshots WHERE server_id=%s ORDER BY ts DESC LIMIT 1",
         (server_id,))
     r = cur.fetchone()
-    return dict(r) if r else None
+    if not r:
+        return None
+    snap = dict(r)
+    # players_json wird nur bei Aenderung geschrieben (spart ~3/4 des
+    # Speichers). Fuer die Anzeige die letzte bekannte Liste nachladen.
+    if snap.get("players_json") is None and snap.get("online"):
+        cur.execute(
+            "SELECT players_json FROM snapshots WHERE server_id=%s AND ts <= %s "
+            "AND players_json IS NOT NULL ORDER BY ts DESC LIMIT 1",
+            (server_id, snap["ts"]))
+        prev = cur.fetchone()
+        if prev:
+            snap["players_json"] = prev["players_json"]
+    return snap
 
 
 def api_servers_list(user_id: int) -> list[dict]:
@@ -1545,12 +1734,43 @@ def api_servers_list(user_id: int) -> list[dict]:
                 try: players = json.loads(snap["players_json"])
                 except Exception: players = []
             cur.execute(
-                "SELECT id, name, added_at, bm_player_id FROM watched_players "
+                "SELECT id, name, added_at, bm_player_id, steam_id FROM watched_players "
                 "WHERE user_id=%s AND server_id=%s ORDER BY name",
                 (user_id, r["id"]))
             watched = [dict(w) for w in cur.fetchall()]
             online_set = {p.lower() for p in players}
-            for w in watched: w["online"] = w["name"].lower() in online_set
+            # Steam-Presence anreichern (SteamID-gewatchte Spieler): funktioniert
+            # auch auf Streamer-Mode-Servern, wo die A2S-Namen fake sind.
+            sids = [int(w["steam_id"]) for w in watched if w.get("steam_id")]
+            presence = {}
+            if sids:
+                cur.execute("SELECT * FROM steam_presence WHERE steam_id = ANY(%s)", (sids,))
+                presence = {int(p["steam_id"]): dict(p) for p in cur.fetchall()}
+            this_ip = r["host"]
+            for w in watched:
+                w["online"] = w["name"].lower() in online_set
+                if w.get("steam_id"):
+                    p = presence.get(int(w["steam_id"]))
+                    # Match auf IP, nicht host:port — Steam meldet den Game-Port,
+                    # wir speichern den Query-Port (siehe presence_ip()).
+                    same_box = bool(p and presence_ip(p.get("server_addr")) == this_ip)
+                    w["steam"] = ({
+                        "persona":        p.get("persona"),
+                        "visible":        bool(p.get("visible")),
+                        "in_rust":        bool(p.get("in_rust")),
+                        "server_addr":    p.get("server_addr"),
+                        "on_this_server": bool(p.get("in_rust")) and same_box,
+                        "updated_at":     p.get("updated_at"),
+                    } if p else None)
+                    # Gelernter Platzhaltername auf diesem Server
+                    alias = confirmed_alias(cur, int(w["steam_id"]), r["id"])
+                    w["alias"] = alias
+                    if alias:
+                        w["alias_online"] = alias in online_set
+                    if p and p.get("in_rust") and same_box:
+                        w["online"] = True
+                    # JS verliert Präzision bei int64 → als String rausgeben
+                    w["steam_id"] = str(w["steam_id"])
             kw = (snap.get("keywords") if snap else "") or ""
             parsed = parse_rust_keywords(kw)
             tier = detect_rust_tier(snap.get("name") if snap else r["name"], parsed.get("tags", []))
@@ -1571,6 +1791,8 @@ def api_servers_list(user_id: int) -> list[dict]:
                 "tags": parsed.get("tags", []),
                 "queued": parsed.get("queued_kw"),
                 "wipe": next_wipe_estimate(parsed.get("born_ts")),
+                "max_group": detect_rust_group_limit(
+                    (snap.get("name") if snap else None) or r["name"], parsed.get("tags", [])),
                 "watched_players": watched,
                 "name_anonymized": bool(r.get("is_anonymized")) or detect_name_anonymization(players),
             })
@@ -1602,6 +1824,20 @@ def api_server_detail(user_id: int, server_id: int, hours: int = 24) -> dict | N
         closed = [dict(x) for x in cur.fetchall()]
         kw_raw = (snap.get("keywords") if snap else "") or ""
         parsed = parse_rust_keywords(kw_raw)
+        players_list = []
+        if snap and snap.get("players_json"):
+            try: players_list = json.loads(snap["players_json"])
+            except Exception: players_list = []
+        # Gelernte Aliase der auf diesem Server per Steam getrackten Spieler:
+        # alias -> echter Name, damit das Frontend die Platzhalter aufloesen kann.
+        alias_map: dict[str, str] = {}
+        cur.execute("SELECT wp.steam_id, wp.name, sp.persona FROM watched_players wp "
+                    "LEFT JOIN steam_presence sp ON sp.steam_id = wp.steam_id "
+                    "WHERE wp.server_id=%s AND wp.steam_id IS NOT NULL", (server_id,))
+        for w in cur.fetchall():
+            a = confirmed_alias(cur, int(w["steam_id"]), server_id)
+            if a:
+                alias_map[a] = w["persona"] or w["name"]
         return {
             "id": r["id"], "host": r["host"], "port": r["port"],
             "name": (snap.get("name") if snap else None) or r["name"],
@@ -1610,33 +1846,116 @@ def api_server_detail(user_id: int, server_id: int, hours: int = 24) -> dict | N
             "keywords_raw": kw_raw, "keywords_parsed": parsed,
             "tier": detect_rust_tier(snap.get("name") if snap else r["name"], parsed.get("tags", [])),
             "wipe": next_wipe_estimate(parsed.get("born_ts")),
+            "name_anonymized": bool(r.get("is_anonymized")) or detect_name_anonymization(players_list),
+            "alias_map": alias_map,
         }
+
+
+_browse_inflight: dict[str, threading.Lock] = {}
+_browse_inflight_lock = threading.Lock()
+
+def browse_refresh(region: str) -> dict:
+    """
+    Holt die Serverliste und legt sie klassifiziert in den Cache.
+
+    Zwei Dinge passieren hier bewusst:
+    1) Single-Flight: Bei gleichzeitigen Cache-Misses fetcht nur EIN Thread,
+       die anderen warten und nehmen sein Ergebnis. Vorher holten alle
+       parallel je 10-20k Server (je ~25-50 MB) -> OOM-Kandidat.
+    2) Klassifikation (Keywords, Tier, Kategorie, Wipe) passiert EINMAL hier
+       statt bei jedem Request. Das waren ~0.5s GIL-haltende CPU pro Aufruf.
+    """
+    with _browse_inflight_lock:
+        lock = _browse_inflight.setdefault(region, threading.Lock())
+    with lock:
+        cached = _cache_get(f"browse:{region}")
+        if cached is not None:
+            return cached                       # ein anderer Thread war schneller
+        t0 = time.time()
+        servers, source = fetch_server_list(region=region, limit=BROWSE_MASTER_LIMIT)
+        prepared = []
+        for s in servers:
+            parsed = parse_rust_keywords(s.get("keywords") or "")
+            prepared.append({
+                "host": s["host"], "port": s["port"],
+                "name": s.get("name") or f"{s['host']}:{s['port']}",
+                "name_lc": (s.get("name") or "").lower(),
+                "map": s.get("map"),
+                "players_count": s.get("players_count") or 0,
+                "max_players": s.get("max_players") or 0,
+                "ping_ms": s.get("ping_ms"),
+                "tier": detect_rust_tier(s.get("name"), parsed.get("tags", [])),
+                "category": detect_rust_category(s.get("name"), parsed.get("tags", [])),
+                "region": detect_rust_region(s.get("name"), parsed.get("tags", [])),
+                "tags": parsed.get("tags", []),
+                "queued": parsed.get("queued_kw") or 0,
+                "wipe": next_wipe_estimate(parsed.get("born_ts")),
+                "max_group": detect_rust_group_limit(s.get("name"), parsed.get("tags", [])),
+                # Pop-Verdacht: mehr Spieler als Slots OHNE Queue gibt es im
+                # echten Rust nicht — das ist praktisch immer Fake-Population.
+                "pop_suspect": bool(
+                    (s.get("players_count") or 0) > (s.get("max_players") or 0) > 0
+                    and not (parsed.get("queued_kw") or 0)),
+            })
+        raw = {
+            "fetched_at":   int(time.time()),
+            "addr_count":   len(prepared),
+            "online_count": len(prepared),
+            "fetch_secs":   round(time.time() - t0, 2),
+            "source":       source,
+            "servers":      prepared,
+        }
+        _cache_put(f"browse:{region}", raw)
+        return raw
+
+
+def browse_warmer_loop():
+    """
+    Haelt den Browse-Cache im Hintergrund warm, damit kein Nutzer-Request je
+    auf einen Fetch warten muss. Nur die Regionen, die tatsaechlich abgefragt
+    werden (siehe _browse_wanted), damit nicht alle 9 Regionen laufen.
+    """
+    while not _poller_stop.is_set():
+        try:
+            for region in list(_browse_wanted):
+                if _poller_stop.is_set(): break
+                age = None
+                e = _browse_cache.get(f"browse:{region}")
+                if e: age = time.time() - e["ts"]
+                if age is None or age > BROWSE_CACHE_TTL * 0.75:
+                    browse_refresh(region)
+        except Exception as e:
+            print(f"[browse-warm] {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+        _poller_stop.wait(max(15, BROWSE_CACHE_TTL // 3))
+
+
+_browse_wanted: set[str] = {"all"}
 
 
 def api_browse(user_id: int | None,
                region="all", q="", tier="all",
                min_pop=0, max_pop=9999,
-               sort="pop_desc", limit=200,
+               sort="pop_desc", limit=200, offset=0,
+               group="all", max_wipe_h=0,
                ip="0.0.0.0") -> dict:
-    cache_key = f"browse:{region}"
-    cache_age = None
+    # Region wechselt NICHT mehr die Datenquelle. Wir holen immer die globale
+    # Steam-Liste (enthaelt alle ~10k Server inkl. Rustafied/Rustoria/Moose) und
+    # filtern die Region serverseitig ueber den offiziellen Region-Tag (mit
+    # Namen-Fallback). Steams eigener \region\-Filter ist fuer Rust unbrauchbar
+    # (die meisten Server melden \region\-1), und BM pro Region ergab den
+    # Fallback-Salat "source: steam_web_api trotz Europe".
+    _browse_wanted.add("all")
+    cache_key = "browse:all"
     raw = _cache_get(cache_key)
     if raw is None:
         if not rate_limit_browse_miss(ip):
             raise PermissionError("rate-limit: too many browser refreshes — please wait")
-        t0 = time.time()
-        servers, source = fetch_server_list(region=region, limit=BROWSE_MASTER_LIMIT)
-        raw = {
-            "fetched_at":   int(time.time()),
-            "addr_count":   len(servers),       # bei den neuen Quellen identisch
-            "online_count": len(servers),
-            "fetch_secs":   round(time.time() - t0, 2),
-            "source":       source,
-            "servers":      servers,
-        }
-        _cache_put(cache_key, raw)
-    else:
-        cache_age = int(time.time() - raw["fetched_at"])
+        raw = browse_refresh("all")             # Single-Flight, siehe unten
+
+    # Dropdown-Region → offizieller Rust-Region-Code (Legacy-Werte mitgemappt).
+    reg = (region or "all").strip().lower()
+    reg = _REGION_FILTER_ALIASES.get(reg, reg)
+    cache_age = int(time.time() - raw["fetched_at"])
 
     # Bereits beobachtete Server (für aktuellen User markieren)
     in_user_watchlist: set[tuple[str, int]] = set()
@@ -1648,45 +1967,82 @@ def api_browse(user_id: int | None,
                 (user_id,))
             in_user_watchlist = {(r["host"], r["port"]) for r in cur.fetchall()}
 
+    # Die Klassifikation steckt bereits im Cache (browse_refresh) — hier wird
+    # nur noch gefiltert. Das spart ~0.5s CPU pro Request.
     ql = (q or "").strip().lower()
+    grp = (group or "all").strip().lower()
+    _now = int(time.time())
     out = []
     for s in raw["servers"]:
-        pc = s.get("players_count") or 0
+        pc = s["players_count"]
         if pc < min_pop or pc > max_pop: continue
-        name = (s.get("name") or "").lower()
-        if ql and ql not in name: continue
-        kw = s.get("keywords") or ""
-        parsed = parse_rust_keywords(kw)
-        s_tier = detect_rust_tier(s.get("name"), parsed.get("tags", []))
-        if tier != "all" and tier != s_tier: continue
-        out.append({
-            "host": s["host"], "port": s["port"],
-            "name": s.get("name") or f"{s['host']}:{s['port']}",
-            "map":  s.get("map"),
-            "players_count": pc, "max_players": s.get("max_players") or 0,
-            "ping_ms": s.get("ping_ms"),
-            "tier": s_tier, "tags": parsed.get("tags", []),
-            "queued": parsed.get("queued_kw") or 0,
-            "wipe": next_wipe_estimate(parsed.get("born_ts")),
-            "in_watchlist": (s["host"], s["port"]) in in_user_watchlist,
-        })
+        if ql and ql not in s["name_lc"]: continue
+        if grp not in ("", "all"):
+            mg = s.get("max_group")
+            if grp == "nolimit":
+                if mg != 0: continue
+            elif grp == "5plus":
+                if not (isinstance(mg, int) and mg >= 5): continue
+            else:
+                try:
+                    if mg != int(grp): continue
+                except ValueError:
+                    pass
+        if max_wipe_h and max_wipe_h > 0:
+            _lw = (s.get("wipe") or {}).get("last_wipe_ts")
+            if not _lw or (_now - _lw) > max_wipe_h * 3600: continue
+        if reg != "all":
+            _grp = _REGION_GROUPS.get(reg)
+            if _grp is not None:
+                if s.get("region") not in _grp: continue
+            elif s.get("region") != reg:
+                continue
+        if tier != "all":
+            if tier == "pve":
+                if s["tier"] != "pve": continue
+            elif tier != s["category"]:
+                continue
+        out.append(s)
 
-    sort_keys = {
-        "pop_desc": lambda x: -(x["players_count"] or 0),
-        "pop_asc":  lambda x:  (x["players_count"] or 0),
-        "name":     lambda x: (x["name"] or "").lower(),
-        "ping":     lambda x: x["ping_ms"] if x["ping_ms"] is not None else 9999,
-        "wipe":     lambda x: x["wipe"]["days_until_next"] if x.get("wipe") else 9999,
+    # Sortier-Spezifikationen: (key-Funktion, reverse). Fehlende Werte landen
+    # bei JEDER Richtung am Ende (deshalb ±inf bzw. Sentinel-Strings).
+    _INF = float("inf")
+    def _num(v, missing):
+        return v if isinstance(v, (int, float)) else missing
+    sort_specs = {
+        "pop_desc":  (lambda x: _num(x.get("players_count"), 0), True),
+        "pop_asc":   (lambda x: _num(x.get("players_count"), 0), False),
+        "name":      (lambda x: (x.get("name") or "\uffff").lower(), False),
+        "name_desc": (lambda x: (x.get("name") or "").lower(), True),
+        "map":       (lambda x: (x.get("map") or "\uffff").lower(), False),
+        "map_desc":  (lambda x: (x.get("map") or "").lower(), True),
+        "ping":      (lambda x: _num(x.get("ping_ms"), _INF), False),
+        "ping_desc": (lambda x: _num(x.get("ping_ms"), -_INF), True),
+        "wipe":      (lambda x: _num((x.get("wipe") or {}).get("days_until_next"), _INF), False),
+        "wipe_desc": (lambda x: _num((x.get("wipe") or {}).get("days_until_next"), -_INF), True),
+        # Frisch gewipte zuerst (Just-Wiped-Style): neuester last_wipe_ts oben
+        "fresh":     (lambda x: _num((x.get("wipe") or {}).get("last_wipe_ts"), -_INF), True),
     }
-    out.sort(key=sort_keys.get(sort, sort_keys["pop_desc"]))
+    keyf, rev = sort_specs.get(sort, sort_specs["pop_desc"])
+    out.sort(key=keyf, reverse=rev)
+
+    # Nur die tatsaechlich gelieferten Zeilen kopieren (die Cache-Objekte sind
+    # geteilt und duerfen nicht veraendert werden). name_lc ist intern.
+    page = []
+    for s in out[offset:offset + limit]:
+        row = {k: v for k, v in s.items() if k != "name_lc"}
+        row["in_watchlist"] = (s["host"], s["port"]) in in_user_watchlist
+        page.append(row)
 
     return {
-        "servers": out[:limit],
+        "servers": page,
+        "offset": offset,
+        "has_more": offset + limit < len(out),
         "source": raw.get("source", "unknown"),
         "total_online": raw["online_count"],
         "total_fetched": raw["addr_count"],
         "matched": len(out),
-        "returned": min(limit, len(out)),
+        "returned": len(page),
         "fetched_at": raw["fetched_at"],
         "cache_age_sec": cache_age,
         "fetch_secs": raw.get("fetch_secs"),
@@ -1695,7 +2051,66 @@ def api_browse(user_id: int | None,
     }
 
 
+MAX_WATCHED_SERVERS = _env("RM_MAX_WATCHED_SERVERS", 50, int)
+MAX_WATCHED_PLAYERS = _env("RM_MAX_WATCHED_PLAYERS", 100, int)
+
+
+def normalize_server_input(host: str, port: int) -> tuple[str, int]:
+    """
+    Räumt auf, was Leute tatsaechlich ins Host-Feld tippen (aus den Altdaten):
+      "connect eu.server.net:28015"  -> host + Port aus dem Connect-Befehl
+      "1.2.3.4:28015"                -> host/Port getrennt
+      "steamcommunity.com/profiles/…"-> klare Fehlermeldung statt "loest nicht auf"
+      "76561199…"                    -> dito (SteamID gehoert ins Spieler-Feld)
+    """
+    h = (host or "").strip()
+    if h.lower().startswith("connect "):
+        h = h[8:].strip()
+    if _STEAMID64_RE.match(h) or "steamcommunity.com" in h.lower() or "steamid.uk" in h.lower():
+        raise ValueError("that's a Steam profile — add it in the player field of a server, "
+                         "not as a server address")
+    if h.lower().startswith(("http://", "https://")):
+        raise ValueError("that's a URL, not a server address — use IP or hostname")
+    # "host:port" im Host-Feld: Port daraus uebernehmen (schlaegt das Formularfeld)
+    if h.count(":") == 1:
+        left, right = h.rsplit(":", 1)
+        if right.isdigit() and 0 < int(right) < 65536 and left:
+            h, port = left, int(right)
+    return h.strip("/ "), port
+
+
+def validate_public_host(host: str, port: int) -> None:
+    """
+    Verhindert, dass ein User interne/private Adressen als 'Rust-Server'
+    eintraegt. Ohne diese Pruefung schickt der Poller alle 20s UDP-Pakete an
+    ein beliebiges Ziel (DDoS-Proxy) bzw. sondiert das interne Netz (SSRF).
+    Hostnamen sind erlaubt, werden aber aufgeloest und jede resultierende
+    IP geprueft.
+    """
+    if not (0 < port < 65536):
+        raise ValueError("invalid port")
+    host = (host or "").strip()
+    if not host or len(host) > 253:
+        raise ValueError("invalid host")
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_UDP)
+    except socket.gaierror:
+        raise ValueError("host does not resolve") from None
+    if not infos:
+        raise ValueError("host does not resolve")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global or ip.is_multicast:
+            raise ValueError(f"address not allowed: {ip}")
+
+
 def add_watch_server(user_id: int, host: str, port: int) -> int:
+    host, port = normalize_server_input(host, port)
+    validate_public_host(host, port)
+    with _Conn() as (conn, cur):
+        cur.execute("SELECT COUNT(*) AS c FROM watched_servers WHERE user_id=%s", (user_id,))
+        if cur.fetchone()["c"] >= MAX_WATCHED_SERVERS:
+            raise PermissionError(f"watchlist limit reached ({MAX_WATCHED_SERVERS} servers)")
     with _Conn() as (conn, cur):
         cur.execute(
             "INSERT INTO servers (host, port, first_seen) VALUES (%s,%s,%s) "
@@ -1723,16 +2138,20 @@ def remove_watch_server(user_id: int, server_id: int):
                     (user_id, server_id))
 
 
-def add_watch_player(user_id: int, server_id: int, name: str):
+def add_watch_player(user_id: int, server_id: int, name: str, steam_id: int | None = None):
     with _Conn() as (conn, cur):
         cur.execute("SELECT 1 FROM watched_servers WHERE user_id=%s AND server_id=%s",
                     (user_id, server_id))
         if not cur.fetchone():
             raise PermissionError("server not in your watchlist")
+        cur.execute("SELECT COUNT(*) AS c FROM watched_players WHERE user_id=%s", (user_id,))
+        if cur.fetchone()["c"] >= MAX_WATCHED_PLAYERS:
+            raise PermissionError(f"limit reached ({MAX_WATCHED_PLAYERS} watched players)")
         cur.execute(
-            "INSERT INTO watched_players (user_id, server_id, name, added_at) "
-            "VALUES (%s,%s,%s,%s) ON CONFLICT (user_id, server_id, name) DO NOTHING",
-            (user_id, server_id, name, int(time.time())))
+            "INSERT INTO watched_players (user_id, server_id, name, added_at, steam_id) "
+            "VALUES (%s,%s,%s,%s,%s) "
+            "ON CONFLICT (user_id, server_id, name) DO UPDATE SET steam_id=EXCLUDED.steam_id",
+            (user_id, server_id, name, int(time.time()), steam_id))
 
 
 def remove_watch_player(user_id: int, watch_id: int):
@@ -1824,8 +2243,30 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
                 except Exception as e:
                     print(f"[upsert_meta live] {e}", file=sys.stderr, flush=True)
             source = "battlemetrics-live"
-        else:
-            return _public_404_html(host, port), 404
+
+    # 2b. Browse-Cache-Fallback (Steam-Liste). BM ist oft 403-gesperrt und die
+    # Sitemap verweist auch auf nicht-gewatchte Server — ohne diesen Fallback
+    # liefen alle diese URLs fuer Besucher UND Google auf 404.
+    if name is None:
+        raw = _cache_get("browse:all", ttl=BROWSE_CACHE_TTL * 4)
+        if raw:
+            row = next((x for x in raw["servers"]
+                        if x["host"] == host and x["port"] == port), None)
+            if row:
+                name = row.get("name"); map_name = row.get("map")
+                players = row.get("players_count"); max_players = row.get("max_players")
+                ping = row.get("ping_ms")
+                online = True                      # Steam-Liste enthaelt nur Online-Server
+                tags = list(row.get("tags") or [])
+                if row.get("queued"): tags.append(f"qp{row['queued']}")
+                _w = row.get("wipe") or {}
+                if _w.get("last_wipe_ts"): tags.append(f"born{_w['last_wipe_ts']}")
+                keywords = ",".join(tags)
+                snap_ts = raw.get("fetched_at")
+                source = "steam-browse-cache"
+
+    if name is None:
+        return _public_404_html(host, port), 404
 
     parsed = parse_rust_keywords(keywords)
     tier = detect_rust_tier(name, parsed.get("tags", []))
@@ -2265,7 +2706,7 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
                 f"<div style='font-size:10px; color:var(--text-dim); font-variant-numeric:tabular-nums;'>{v}</div>"
                 f"</div>")
         sparkline_html = (
-            f"<div style='display:flex; gap:3px; align-items:flex-end; padding:8px 0;'>"
+            "<div style='display:flex; gap:3px; align-items:flex-end; padding:8px 0;'>"
             + "".join(bars) + "</div>"
             f"<p class='hint' style='text-align:right; font-size:11px;'>last 14 days · max {max_v}/day</p>")
 
@@ -2297,7 +2738,7 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
                     f"<div style='width:100%; height:42px; display:flex; align-items:flex-end;'>"
                     f"<div style='width:100%; height:{max(2,h)}px; background:var(--hazmat); border-radius:2px;'></div>"
                     f"</div></div>")
-            hits_bars = (f"<div style='display:flex; gap:2px; align-items:flex-end; padding:8px 0;'>"
+            hits_bars = ("<div style='display:flex; gap:2px; align-items:flex-end; padding:8px 0;'>"
                          + "".join(bars) + "</div>"
                          f"<p class='hint' style='text-align:right; font-size:11px;'>last 24h · max {hmax}/h</p>")
         caddy_html = f"""
@@ -2967,11 +3408,30 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    MAX_BODY_BYTES = 64 * 1024
+
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", 0) or 0)
-        if length == 0: return {}
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            return {}
+        if length <= 0: return {}
+        if length > self.MAX_BODY_BYTES:
+            # Ohne Cap kann ein Client mit Content-Length: 2000000000 den
+            # Prozess in eine 2-GB-Allokation treiben.
+            return {}
         try: return json.loads(self.rfile.read(length).decode("utf-8"))
         except Exception: return {}
+
+    def _fail(self, e: Exception, ctx: str = "") -> None:
+        """
+        500 ohne interne Details. Die Original-Exception geht mit einer
+        Referenz-ID ins Log — vorher landeten psycopg2-Meldungen inkl.
+        Tabellen-/Spaltennamen direkt beim Client.
+        """
+        ref = secrets.token_hex(6)
+        print(f"[err {ref}] {ctx}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+        return self._json({"error": "internal error", "ref": ref}, 500)
 
     def _read_session(self) -> dict | None:
         cookie_hdr = self.headers.get("Cookie", "")
@@ -3043,6 +3503,13 @@ class Handler(SimpleHTTPRequestHandler):
             sess = self._read_session()
             if not sess: return self._json({"error": "auth required"}, 401)
             return self._json(api_servers_list(sess["user_id"]))
+        if u.path == "/api/me/friends":
+            sess = self._read_session()
+            if not sess: return self._json({"error": "auth required"}, 401)
+            try:
+                return self._json(api_friends_in_rust(sess["user_id"]))
+            except Exception as e:
+                return self._fail(e, "friends")
         if u.path.startswith("/api/server/"):
             parts = u.path.strip("/").split("/")
             if len(parts) == 3:
@@ -3051,7 +3518,12 @@ class Handler(SimpleHTTPRequestHandler):
                 try: sid = int(parts[2])
                 except ValueError: return self._json({"error": "bad id"}, 400)
                 qs = urllib.parse.parse_qs(u.query)
-                hours = int(qs.get("hours", ["24"])[0])
+                # Ungeprueft konnte ?hours=abc einen 500er ohne Antwort und
+                # ?hours=99999999 einen Full-Table-Scan ueber alle Snapshots ausloesen.
+                try:
+                    hours = max(1, min(720, int(qs.get("hours", ["24"])[0])))
+                except (ValueError, TypeError):
+                    return self._json({"error": "bad hours"}, 400)
                 d = api_server_detail(sess["user_id"], sid, hours)
                 if d is None: return self._json({"error": "not found"}, 404)
                 return self._json(d)
@@ -3070,7 +3542,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "my_best": my_best,
                 })
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
         if u.path == "/api/game/flap/me":
             sess = self._read_session()
             if not sess: return self._json({"error": "auth required"}, 401)
@@ -3084,7 +3556,7 @@ class Handler(SimpleHTTPRequestHandler):
                 stats = get_rust_user_stats(sess["user_id"], force_refresh=False)
                 return self._json(stats or {"error": "stats unavailable"})
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
 
         # Stats für einen einzelnen Player (Steam-ID wird per BM lazy resolved)
         # /api/player/<bm_id>/stats
@@ -3105,7 +3577,7 @@ class Handler(SimpleHTTPRequestHandler):
                 stats["available"] = True
                 return self._json(stats)
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
 
         if u.path == "/api/browse":
             sess = self._read_session()
@@ -3120,14 +3592,17 @@ class Handler(SimpleHTTPRequestHandler):
                     min_pop=int(g("min_pop", "0") or 0),
                     max_pop=int(g("max_pop", "9999") or 9999),
                     sort=g("sort", "pop_desc"),
-                    limit=min(500, int(g("limit", "200") or 200)),
+                    limit=min(BROWSE_RESULT_CAP, int(g("limit", "200") or 200)),
+                    offset=max(0, min(20000, int(g("offset", "0") or 0))),
+                    group=g("group", "all"),
+                    max_wipe_h=max(0, min(720, int(g("max_wipe_h", "0") or 0))),
                     ip=self._client_ip(),
                 )
                 return self._json(data)
             except PermissionError as e:
                 return self._json({"error": str(e)}, 429)
             except Exception as e:
-                return self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return self._fail(e)
 
         # Legal pages (English now; old DE paths kept as alias)
         if u.path in ("/imprint", "/impressum"):
@@ -3144,7 +3619,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "Disallow: /auth/\n"
                 "\n"
                 f"Sitemap: {ORIGIN}/sitemap.xml\n"
-            ).encode("utf-8")
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -3212,7 +3687,7 @@ class Handler(SimpleHTTPRequestHandler):
                         html, status = render_public_server_page(host, port)
                     except Exception as e:
                         print(f"[public_server] {host}:{port}: {e}", file=sys.stderr, flush=True)
-                        return self._json({"error": str(e)}, 500)
+                        return self._fail(e)
                     body = html.encode("utf-8")
                     self.send_response(status)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3235,7 +3710,7 @@ class Handler(SimpleHTTPRequestHandler):
                 ics = render_wipes_ics(user_id)
             except Exception as e:
                 print(f"[ics_feed] user={user_id}: {e}", file=sys.stderr, flush=True)
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
             body = ics.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/calendar; charset=utf-8")
@@ -3259,7 +3734,7 @@ class Handler(SimpleHTTPRequestHandler):
                 html, status = render_admin_stats_page(sess)
             except Exception as e:
                 print(f"[admin_stats] {e}", file=sys.stderr, flush=True)
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
             body = html.encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3280,7 +3755,7 @@ class Handler(SimpleHTTPRequestHandler):
                 html, status = render_player_profile_page(bm_id)
             except Exception as e:
                 print(f"[player_profile] bm_id={bm_id}: {e}", file=sys.stderr, flush=True)
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
             body = html.encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3313,8 +3788,12 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 sid = add_watch_server(sess["user_id"], host, port)
                 return self._json({"ok": True, "id": sid})
+            except ValueError as e:          # ungueltige/private Adresse
+                return self._json({"error": str(e)}, 400)
+            except PermissionError as e:     # Watchlist-Limit erreicht
+                return self._json({"error": str(e)}, 403)
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
 
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "server"
                 and parts[3] == "watch"):
@@ -3324,12 +3803,21 @@ class Handler(SimpleHTTPRequestHandler):
             name = (body.get("name") or "").strip()
             if not name: return self._json({"error": "name required"}, 400)
             try:
+                # SteamID64 / Profil-URL erkannt? → Presence-Tracking statt
+                # Namens-Match (funktioniert auch auf Streamer-Mode-Servern).
+                steam_id = parse_steam_player_input(name)
+                if steam_id:
+                    summary = fetch_player_summaries([steam_id]).get(steam_id) or {}
+                    display = summary.get("personaname") or str(steam_id)
+                    add_watch_player(sess["user_id"], sid, display, steam_id=steam_id)
+                    return self._json({"ok": True, "steam_id": str(steam_id),
+                                       "persona": display})
                 add_watch_player(sess["user_id"], sid, name)
                 return self._json({"ok": True})
             except PermissionError as e:
                 return self._json({"error": str(e)}, 403)
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
 
         if u.path == "/api/me/settings":
             return self._api_save_settings(sess["user_id"])
@@ -3355,7 +3843,7 @@ class Handler(SimpleHTTPRequestHandler):
                 stats = get_rust_user_stats(sess["user_id"], force_refresh=True)
                 return self._json(stats or {"error": "stats unavailable"})
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
         if u.path.startswith("/api/player/") and u.path.endswith("/stats/refresh"):
             spec = u.path[len("/api/player/"):-len("/stats/refresh")]
             try: bm_id = int(spec)
@@ -3370,7 +3858,7 @@ class Handler(SimpleHTTPRequestHandler):
                 stats["available"] = True
                 return self._json(stats)
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
         if u.path == "/api/me/calendar/reset":
             try:
                 new_token = reset_calendar_token(sess["user_id"])
@@ -3378,7 +3866,7 @@ class Handler(SimpleHTTPRequestHandler):
                 cal_webcal = cal_url.replace("https://", "webcal://").replace("http://", "webcal://")
                 return self._json({"ok": True, "url": cal_url, "webcal_url": cal_webcal})
             except Exception as e:
-                return self._json({"error": str(e)}, 500)
+                return self._fail(e)
         if u.path == "/api/me/test-webhook":
             return self._api_test_webhook(sess["user_id"])
 
@@ -3455,7 +3943,11 @@ class Handler(SimpleHTTPRequestHandler):
                         "notify_online":   bool(r["notify_online"]),
                         "notify_offline":  bool(r["notify_offline"]),
                     }
-        except Exception: pass
+        except Exception as e:
+            # Settings fehlen dann in /api/me — tolerierbar, aber loggen,
+            # sonst debuggt man ein "leeres Settings-Formular" blind.
+            print(f"[api_me] Settings-Query fehlgeschlagen: "
+                  f"{type(e).__name__}: {e}", file=sys.stderr, flush=True)
         # Calendar-URL (lazy generiert beim ersten Mal)
         try:
             cal_token = get_or_create_calendar_token(sess["user_id"])
@@ -3492,7 +3984,7 @@ class Handler(SimpleHTTPRequestHandler):
                     (webhook, notify_online, notify_offline, user_id))
             return self._json({"ok": True})
         except Exception as e:
-            return self._json({"error": str(e)}, 500)
+            return self._fail(e)
 
     def _api_test_webhook(self, user_id: int):
         with _Conn() as (conn, cur):
@@ -3553,8 +4045,14 @@ def main():
         print(f"FATAL: Postgres-Verbindung fehlgeschlagen: {e}", file=sys.stderr)
         sys.exit(2)
 
+    ensure_migrations()
+
     t = threading.Thread(target=poller_loop, daemon=True)
     t.start()
+    tp = threading.Thread(target=steam_presence_loop, daemon=True)
+    tp.start()
+    tw = threading.Thread(target=browse_warmer_loop, daemon=True)
+    tw.start()
 
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     httpd.daemon_threads = True

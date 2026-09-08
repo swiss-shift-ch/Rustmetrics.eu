@@ -1,0 +1,11 @@
+line-length = 120
+target-version = "py311"
+
+[lint]
+# E7xx-Stil (mehrere Statements pro Zeile) ist im Codebase bewusster Kompakt-Stil.
+select = ["E", "F", "W", "B", "UP"]
+ignore = ["E501", "E701", "E702", "E731", "E741"]
+
+[lint.per-file-ignores]
+# Testdatei nutzt bewusst %-Formatstrings im check()-Stil
+"test_presence.py" = ["UP031", "E402"]

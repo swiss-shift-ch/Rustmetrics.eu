@@ -13,6 +13,7 @@
   let browseCache    = null;
   let onlineStateMap = new Map();
   let currentDrawer  = null;
+  let drawerHours    = 24;      // Chart-Zeitraum im Detail-Drawer (24h/168h/720h)
   let detailTimer    = null;
   let currentTab     = "watchlist";
   let browseFetched  = false;
@@ -68,11 +69,17 @@
     bfRegion:       $("#bf-region"),
     bfTier:         $("#bf-tier"),
     bfSort:         $("#bf-sort"),
+    bfGroup:        $("#bf-group"),
+    bfWiped:        $("#bf-wiped"),
     bfMinPop:       $("#bf-min-pop"),
     bfRefresh:      $("#bf-refresh"),
     browseLoading:  $("#browse-loading"),
     browseResults:  $("#browse-results"),
     browseStatus:   $("#browse-status"),
+    friendsSection: $("#friends-section"),
+    friendsList:    $("#friends-list"),
+    friendsCount:   $("#friends-count"),
+    friendsRefresh: $("#friends-refresh"),
   };
 
   const fmt = {
@@ -271,6 +278,12 @@
   function renderTags(s) {
     const tags = [];
     if (s.tier) tags.push(`<span class="tag tier-${s.tier}">${fmt.escape(s.tier)}</span>`);
+    if (s.region) tags.push(`<span class="tag region">${fmt.escape(String(s.region).toUpperCase())}</span>`);
+    if (s.max_group != null) {
+      const GL = {1:"solo", 2:"duo", 3:"trio", 4:"quad"};
+      const lbl = s.max_group === 0 ? "no limit" : (GL[s.max_group] || `max ${s.max_group}`);
+      tags.push(`<span class="tag group" title="Max group size (detected from server name/tags)">${lbl}</span>`);
+    }
     for (const t of (s.tags || []).slice(0, 4)) {
       if (t === s.tier) continue;
       tags.push(`<span class="tag">${fmt.escape(t)}</span>`);
@@ -281,18 +294,42 @@
   function renderWatchlistSub(s) {
     const anonWarn = s.name_anonymized ? `
       <div class="anon-warn">
-        ⚠ This server randomizes player names (Facepunch privacy / anti-stalking).
-        Watching individual names won't work here — even BattleMetrics gets the same fake names.
+        ⚠ This server randomizes player names (Facepunch streamer mode /
+        <code>censorplayerlist</code>) — name-watching won't work here, even
+        BattleMetrics gets the same fake names.<br />
+        <strong>Workaround:</strong> add players by <strong>SteamID64 or Steam
+        profile URL</strong> below — Steam presence tracking sees them anyway
+        (requires their profile's game details to be public).
       </div>` : "";
     const items = (s.watched_players || []).map(w => {
       const nameHTML = w.bm_player_id
         ? `<a class="player-name plink" href="/player/${w.bm_player_id}" target="_blank" rel="noopener">${fmt.escape(w.name)}</a>`
         : `<span class="player-name">${fmt.escape(w.name)}</span>`;
+      // Steam-presence status (steam-watched players work despite streamer mode)
+      let dotCls = w.online ? "is-online" : "";
+      let meta   = w.online ? "ONLINE" : "OFFLINE";
+      let steamBadge = "";
+      if (w.steam_id) {
+        const p = w.steam;
+        steamBadge = `<span class="tag steam-tag" title="Tracked via Steam presence (SteamID ${fmt.escape(w.steam_id)})">steam</span>`;
+        if (!p) {
+          meta = "PENDING";       // erster Presence-Poll steht noch aus
+        } else if (p.in_rust && p.on_this_server) {
+          dotCls = "is-online"; meta = "ONLINE";
+        } else if (p.in_rust) {
+          dotCls = "is-online";
+          meta = `IN RUST · ${fmt.escape(p.server_addr || "other server")}`;
+        } else if (!p.visible) {
+          meta = "PROFILE PRIVATE";
+        } else {
+          meta = "OFFLINE / DETAILS HIDDEN";
+        }
+      }
       return `
-      <div class="watched-player ${w.online ? "is-online" : "is-offline"}" data-watch-id="${w.id}">
-        <span class="player-dot ${w.online ? "is-online" : ""}"></span>
-        ${nameHTML}
-        <span class="player-meta">${w.online ? "ONLINE" : "OFFLINE"}</span>
+      <div class="watched-player ${dotCls ? "is-online" : "is-offline"}" data-watch-id="${w.id}">
+        <span class="player-dot ${dotCls}"></span>
+        ${nameHTML}${steamBadge}
+        <span class="player-meta">${meta}</span>
         <button class="btn-remove" title="Remove" data-remove-watch="${s.id}:${w.id}">×</button>
       </div>
     `;
@@ -307,7 +344,7 @@
         </div>
         ${items || `<div class="watchlist-empty">None yet — add names below.</div>`}
         <form class="add-watch-form" data-add-watch="${s.id}">
-          <input type="text" placeholder="Player name (exact, as in game)" required />
+          <input type="text" placeholder="Player name — or SteamID64 / profile URL" required />
           <button type="submit">+ Watch</button>
         </form>
       </div>
@@ -445,6 +482,80 @@
     } catch (err) { alert(err.message); }
   });
 
+
+  // ─── Freunde, die gerade Rust spielen ─────────────────────────────────
+  // Nutzt die Steam-Freundesliste + Presence. Braucht eine oeffentliche
+  // Freundesliste; ist sie privat, blendet sich der Block einfach aus.
+  async function loadFriends() {
+    if (!els.friendsSection) return;
+    try {
+      const d = await api("/api/me/friends");
+      if (!d.available || !d.friends.length) {
+        els.friendsSection.hidden = true;
+        return;
+      }
+      els.friendsSection.hidden = false;
+      els.friendsCount.textContent =
+        `${d.playing} of ${d.total_friends} friends`;
+      els.friendsList.innerHTML = d.friends.map(f => {
+        const where = f.server_name
+          ? fmt.escape(f.server_name)
+          : (f.server_addr ? fmt.escape(f.server_addr) : "unknown server");
+        const act = f.on_watchlist
+          ? `<button class="btn-small" data-friend-watch="${fmt.escape(f.steam_id)}"
+               data-friend-server="${f.server_id || ""}"
+               data-friend-name="${fmt.escape(f.persona)}">+ Track</button>`
+          : (f.server_ip
+             ? `<button class="btn-small" data-friend-addserver="${fmt.escape(f.server_ip)}"
+                  data-friend-steam="${fmt.escape(f.steam_id)}"
+                  data-friend-name="${fmt.escape(f.persona)}">+ Server & Track</button>`
+             : "");
+        const av = f.avatar ? `<img class="friend-av" src="${fmt.escape(f.avatar)}" alt="" />` : "";
+        return `<div class="friend">
+            ${av}
+            <span class="friend-name">${fmt.escape(f.persona)}</span>
+            <span class="friend-where">on ${where}</span>
+            <span class="friend-act">${act}</span>
+          </div>`;
+      }).join("");
+    } catch (e) {
+      els.friendsSection.hidden = true;
+    }
+  }
+
+  els.friendsRefresh?.addEventListener("click", loadFriends);
+
+  els.friendsList?.addEventListener("click", async (e) => {
+    const track = e.target.closest("[data-friend-watch]");
+    const addsrv = e.target.closest("[data-friend-addserver]");
+    const btn = track || addsrv;
+    if (!btn) return;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      if (addsrv) {
+        // Server zuerst auf die Watchlist, dann den Freund per SteamID tracken
+        const r = await api("/api/servers", {
+          method: "POST",
+          body: JSON.stringify({ host: addsrv.dataset.friendAddserver, port: 28015 })
+        });
+        await api(`/api/server/${r.id}/watch`, {
+          method: "POST",
+          body: JSON.stringify({ name: addsrv.dataset.friendSteam })
+        });
+      } else {
+        await api(`/api/server/${track.dataset.friendServer}/watch`, {
+          method: "POST",
+          body: JSON.stringify({ name: track.dataset.friendWatch })
+        });
+      }
+      await loadServers();
+      await loadFriends();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false; btn.textContent = "+ Track";
+    }
+  });
+
   els.addForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const host = els.addHost.value.trim();
@@ -475,8 +586,44 @@
     refreshDetail();   // re-render mit neuem Sort
   });
 
+  // Add-Watch-Form IM Drawer (Steam-Feld): eigener Submit-Handler, da der
+  // Watchlist-Handler nur auf els.servers hört.
+  els.drawerBody?.addEventListener("submit", async (e) => {
+    const form = e.target.closest("[data-add-watch]");
+    if (!form) return;
+    e.preventDefault();
+    const sid = form.dataset.addWatch;
+    const input = form.querySelector("input");
+    const val = input.value.trim();
+    if (!val) return;
+    const btn = form.querySelector("button");
+    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    try {
+      const res = await api(`/api/server/${sid}/watch`,
+                            { method: "POST", body: JSON.stringify({ name: val }) });
+      input.value = "";
+      if (res && res.steam_id) {
+        // kleine Bestätigung, damit klar ist dass Steam-Tracking griff
+        input.placeholder = `✓ tracking ${res.persona || res.steam_id} via Steam`;
+      }
+      await loadServers();
+      await refreshDetail();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "+ Track via Steam"; }
+    }
+  });
+
   // Quick-Watch (+ Button) im Drawer: ein-Klick Spieler zur Watchlist
   els.drawerBody?.addEventListener("click", async (e) => {
+    // Chart-Zeitraum umschalten (24h / 7d / 30d)
+    const rangeBtn = e.target.closest?.("[data-chart-hours]");
+    if (rangeBtn) {
+      drawerHours = parseInt(rangeBtn.dataset.chartHours, 10) || 24;
+      refreshDetail();
+      return;
+    }
     const btn = e.target.closest?.(".p-quick-watch");
     if (!btn) return;
     e.preventDefault();
@@ -503,6 +650,7 @@
 
   async function openDetail(sid) {
     currentDrawer = sid;
+    drawerHours = 24;
     els.drawer.hidden = false;
     els.drawerBody.innerHTML = `<p style="color:var(--text-dim)">Loading …</p>`;
     await refreshDetail();
@@ -517,7 +665,7 @@
   async function refreshDetail() {
     if (!currentDrawer) return;
     try {
-      const d = await api(`/api/server/${currentDrawer}?hours=24`);
+      const d = await api(`/api/server/${currentDrawer}?hours=${drawerHours}`);
       els.drawerTitle.textContent = d.name || `${d.host}:${d.port}`;
       els.drawerBody.innerHTML = renderDetail(d);
     } catch (e) {
@@ -550,17 +698,76 @@
       sortedPlayers.sort((a,b) => (a||"").toLowerCase().localeCompare((b||"").toLowerCase()));
     else if (detailSort.current === "name_desc")
       sortedPlayers.sort((a,b) => (b||"").toLowerCase().localeCompare((a||"").toLowerCase()));
+    const anon = !!d.name_anonymized;
+    // Gelernte Platzhalter → echter Name (siehe Alias-Lernen im Backend)
+    const aliasMap = d.alias_map || {};
     const playerItems = sortedPlayers.map(name => {
-      const w = watchedSet.has((name || "").toLowerCase());
+      const lc = (name || "").toLowerCase();
+      const real = aliasMap[lc];
+      const w = watchedSet.has(lc);
       const escName = fmt.escape(name);
-      const quickBtn = w
-        ? `<span class="p-watched-mark" title="On your watchlist">★</span>`
-        : `<button class="p-quick-watch" type="button"
-             data-quick-watch-sid="${d.id}"
-             data-quick-watch-name="${escName}"
-             title="Add ${escName} to your watchlist">+</button>`;
+      if (real) {
+        return `<div class="p is-watched is-alias" title="Platzhalter '${escName}' gehört zu ${fmt.escape(real)}">
+                  <span class="pname"><strong>${fmt.escape(real)}</strong>
+                  <span class="alias-raw">(${escName})</span></span>
+                  <span class="p-watched-mark">★</span>
+                </div>`;
+      }
+      // Auf Streamer-Mode-Servern sind die Namen fake → "+"-Watch bringt nichts,
+      // deshalb dort ausblenden.
+      const quickBtn = anon ? ""
+        : (w
+          ? `<span class="p-watched-mark" title="On your watchlist">★</span>`
+          : `<button class="p-quick-watch" type="button"
+               data-quick-watch-sid="${d.id}"
+               data-quick-watch-name="${escName}"
+               title="Add ${escName} to your watchlist">+</button>`);
       return `<div class="p ${w ? "is-watched" : ""}">${nameLink(name)}${quickBtn}</div>`;
     }).join("") || `<div style="color:var(--text-dim); padding:6px;">No players online — or the server doesn't expose its list.</div>`;
+
+    // Steam-getrackte Spieler dieses Servers (funktionieren trotz Streamer-Mode)
+    const steamWatched = watched.filter(w => w.steam_id);
+    const steamRows = steamWatched.map(w => {
+      const p = w.steam;
+      let cls = "is-offline", meta = "PENDING";
+      if (p) {
+        if (p.in_rust && p.on_this_server) {
+          cls = "is-online";
+          meta = w.alias ? `ONLINE HERE · alias „${fmt.escape(w.alias)}"` : "ONLINE HERE";
+        }
+        else if (p.in_rust) { cls = "is-online"; meta = `IN RUST · ${fmt.escape(p.server_addr || "other")}`; }
+        else if (!p.visible) { cls = "is-offline"; meta = "PROFILE PRIVATE"; }
+        else { cls = "is-offline"; meta = "OFFLINE / HIDDEN"; }
+      }
+      return `<div class="watched-player ${cls}" data-watch-id="${w.id}">
+        <span class="player-dot ${cls === "is-online" ? "is-online" : ""}"></span>
+        <span class="player-name">${fmt.escape((w.steam && w.steam.persona) || w.name)}</span>
+        <span class="tag steam-tag">steam</span>
+        <span class="player-meta">${meta}</span>
+        <button class="btn-remove" title="Remove" data-remove-watch="${d.id}:${w.id}">×</button>
+      </div>`;
+    }).join("");
+
+    const anonBanner = anon ? `
+      <div class="anon-warn" style="margin-bottom:12px;">
+        ⚠ <strong>Streamer mode active</strong> — this server (<code>censorplayerlist</code>)
+        replaces the whole online list below with random placeholder names. They are
+        <strong>not real players</strong>, and no tool (incl. BattleMetrics) can reveal
+        the real ones from the server query.<br />
+        ✅ <strong>To actually track someone here, add them by SteamID64 or profile URL</strong>
+        — Steam presence works regardless of streamer mode (needs their profile game
+        details set to public).
+      </div>` : "";
+
+    const steamBox = `
+      <section class="detail-section">
+        <h3>Steam-tracked players (${steamWatched.length})</h3>
+        ${steamRows || `<div style="color:var(--text-dim); padding:6px;">None yet — add a SteamID64 or profile URL below to track someone even under streamer mode.</div>`}
+        <form class="add-watch-form" data-add-watch="${d.id}" style="margin-top:8px;">
+          <input type="text" placeholder="SteamID64 or steamcommunity.com/… profile URL" required />
+          <button type="submit">+ Track via Steam</button>
+        </form>
+      </section>`;
 
     // ── Active sessions (sortable: longest active, recently joined, A-Z) ──
     const now = Math.floor(Date.now() / 1000);
@@ -597,6 +804,30 @@
     const wipeStr = d.wipe?.days_until_next != null
       ? `next wipe in ~${d.wipe.days_until_next} days` : "—";
 
+    // Verlaufs-Statistik unter dem Chart: Peak / Durchschnitt / Uptime
+    let histStats = "";
+    {
+      const h = d.history || [];
+      if (h.length >= 2) {
+        const vals = h.map(r => r.players_count ?? 0);
+        const peak = Math.max(...vals);
+        const avg  = Math.round(vals.reduce((a,b) => a+b, 0) / vals.length);
+        const up   = Math.round(100 * h.filter(r => r.online).length / h.length);
+        histStats = `<div class="hist-stats">
+          <span title="Highest player count in this window">peak <strong>${peak}</strong></span>
+          <span title="Average player count in this window">avg <strong>${avg}</strong></span>
+          <span title="Share of polls where the server answered">uptime <strong>${up}%</strong></span>
+        </div>`;
+      }
+    }
+
+    // Server blockt die oeffentliche Spielerliste (A2S_PLAYER) komplett:
+    // Count > 0, aber keine Namen — und KEINE erkannte Anonymisierung.
+    const listBlocked = !anon && (snap.players_count ?? 0) > 0 && players.length === 0;
+    const listBlockedNote = listBlocked
+      ? `<div class="list-blocked-note">This server blocks its public player list (A2S_PLAYER) — names can't be shown. Population count still works.</div>`
+      : "";
+
     return `
       <section class="detail-section">
         <h3>Server</h3>
@@ -612,14 +843,23 @@
         </dl>
       </section>
       <section class="detail-section">
-        <h3>Population (last 24h)</h3>
-        <div class="chart-wrap">${renderChart(d.history || [])}</div>
+        <h3>Population (last ${drawerHours === 24 ? "24h" : drawerHours === 168 ? "7 days" : "30 days"})
+          <span class="chart-range">
+            ${[[24,"24h"],[168,"7d"],[720,"30d"]].map(([h,l]) =>
+              `<button class="chart-range-btn${h===drawerHours?" is-active":""}" data-chart-hours="${h}">${l}</button>`).join("")}
+          </span>
+        </h3>
+        <div class="chart-wrap">${renderChart(d.history || [], snap.max_players)}</div>
+        ${histStats}
       </section>
+      ${anonBanner}
+      ${steamBox}
       <section class="detail-section">
-        <h3>Currently online (${players.length})
+        <h3>Currently online (${players.length})${anon ? ' <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:0;">— randomized names, not real</span>' : ''}
           ${sortSelectHTML("current", [["name_asc","A → Z"],["name_desc","Z → A"]], detailSort.current)}
         </h3>
-        <div class="player-list">${playerItems}</div>
+        ${listBlockedNote}
+        <div class="player-list"${anon ? ' style="opacity:0.5;"' : ''}>${playerItems}</div>
       </section>
       ${activeRows ? `<section class="detail-section">
         <h3>Active sessions (${activeSorted.length})
@@ -638,13 +878,16 @@
     `;
   }
 
-  function renderChart(hist) {
+  function renderChart(hist, maxPlayers) {
     if (!hist.length) return `<div style="color:var(--text-dim); padding:24px; text-align:center;">No data yet — collecting.</div>`;
     const W = 600, H = 120, P = 8;
     const xs = hist.map(r => r.ts);
     const ys = hist.map(r => r.players_count ?? 0);
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
-    const yMax = Math.max(1, ...ys);
+    // Y-Skala: Slots des Servers ODER hoechster Messwert (manche Server melden
+    // Fake-Pop ueber max_players) — plus 5% Luft, damit die Linie nie am
+    // oberen Rand klebt und wie "abgeschnitten" aussieht.
+    const yMax = Math.max(1, Number(maxPlayers) || 0, ...ys) * 1.05;
     const xrange = Math.max(1, xMax - xMin);
     const pts = hist.map(r => {
       const x = P + ((r.ts - xMin) / xrange) * (W - 2*P);
@@ -668,40 +911,103 @@
         <text x="${P}" y="12" fill="#555" font-size="9">${new Date(xMin*1000).toLocaleString()}</text>
         <text x="${W-P}" y="12" text-anchor="end" fill="#555" font-size="9">${new Date(xMax*1000).toLocaleString()}</text>
       </svg>
+      ${hist.length < 10 ? `<div style="color:var(--text-dim); font-size:11px; text-align:center; padding:4px 0 0;">⏳ Only ${hist.length} snapshot${hist.length === 1 ? "" : "s"} so far — chart fills in as data is collected.</div>` : ""}
     `;
   }
 
   // ─── Server browser ───────────────────────────────────────────────────
-  function browseQS(forceRefresh) {
+  const BROWSE_PAGE = 100;
+  let browseOffset = 0, browseLoadingMore = false;
+
+  function browseQS(forceRefresh, offset = 0) {
     const params = new URLSearchParams();
     if (els.bfQ.value.trim()) params.set("q",       els.bfQ.value.trim());
     if (els.bfRegion.value)   params.set("region",  els.bfRegion.value);
     if (els.bfTier.value)     params.set("tier",    els.bfTier.value);
     if (els.bfSort.value)     params.set("sort",    els.bfSort.value);
+    if (els.bfGroup?.value && els.bfGroup.value !== "all") params.set("group", els.bfGroup.value);
+    if (els.bfWiped?.value && els.bfWiped.value !== "0")   params.set("max_wipe_h", els.bfWiped.value);
     if (els.bfMinPop.value)   params.set("min_pop", els.bfMinPop.value);
-    params.set("limit", "250");
+    // Seitenweise laden: 1000 Zeilen auf einmal waren ~400 KB pro Klick und
+    // ~700 KB innerHTML — auf dem Handy spuerbar. Rest kommt beim Scrollen.
+    params.set("limit", String(BROWSE_PAGE));
+    if (offset) params.set("offset", String(offset));
     return "/api/browse?" + params.toString() + (forceRefresh ? "&_=" + Date.now() : "");
+  }
+
+  function browseStatusText(data, shown) {
+    const ageStr = data.cache_age_sec != null
+                 ? ` (cached ${data.cache_age_sec}s ago)`
+                 : data.fetch_secs ? ` (fetched in ${data.fetch_secs}s)` : "";
+    return `${shown.toLocaleString()} of ${data.matched.toLocaleString()} shown · ` +
+           `${data.total_online.toLocaleString()} online · ` +
+           `source: ${data.source || "unknown"}${ageStr}`;
   }
 
   async function loadBrowse(forceRefresh = false) {
     els.browseLoading.hidden = false;
     els.browseStatus.textContent = "loading …";
+    browseOffset = 0;
     try {
-      const data = await api(browseQS(forceRefresh));
+      const data = await api(browseQS(forceRefresh, 0));
       browseCache = data;
       renderBrowse(data);
-      const ageStr = data.cache_age_sec != null
-                   ? ` (cached ${data.cache_age_sec}s ago)`
-                   : data.fetch_secs ? ` (fetched in ${data.fetch_secs}s)` : "";
-      els.browseStatus.textContent =
-        `${data.matched.toLocaleString()} of ${data.total_online.toLocaleString()} online · ` +
-        `source: ${data.source || "unknown"}${ageStr}`;
+      browseOffset = (data.servers || []).length;
+      els.browseStatus.textContent = browseStatusText(data, browseOffset);
     } catch (e) {
       els.browseResults.innerHTML = `<div class="browse-empty" style="color:var(--red)">Error: ${fmt.escape(e.message)}</div>`;
       els.browseStatus.textContent = "Error loading";
     } finally {
       els.browseLoading.hidden = true;
     }
+  }
+
+  async function loadBrowseMore() {
+    if (browseLoadingMore || !browseCache || !browseCache.has_more) return;
+    browseLoadingMore = true;
+    try {
+      const data = await api(browseQS(false, browseOffset));
+      const rows = data.servers || [];
+      if (rows.length) {
+        els.browseResults.insertAdjacentHTML("beforeend", browseRowsHTML(rows));
+        browseOffset += rows.length;
+        browseCache.has_more = data.has_more;
+        browseCache.servers = browseCache.servers.concat(rows);
+        els.browseStatus.textContent = browseStatusText(data, browseOffset);
+      } else {
+        browseCache.has_more = false;
+      }
+    } catch (e) {
+      /* stiller Fehlschlag beim Nachladen — die erste Seite steht ja */
+    } finally {
+      browseLoadingMore = false;
+    }
+  }
+
+  // Nachladen, sobald der Nutzer ans Ende scrollt
+  window.addEventListener("scroll", () => {
+    if (!browseCache || !browseCache.has_more) return;
+    if (els.browseResults.hidden) return;
+    const rect = els.browseResults.getBoundingClientRect();
+    if (rect.bottom - window.innerHeight < 600) loadBrowseMore();
+  }, { passive: true });
+
+  // Spalte → Backend-Sortier-Werte. Klick auf einen Spaltenkopf togglet
+  // asc/desc; erste Sortierung pro Spalte nimmt die sinnvolle Default-Richtung.
+  const SORT_COLS = {
+    name: { asc: "name",    desc: "name_desc", first: "asc"  },
+    pop:  { asc: "pop_asc", desc: "pop_desc",  first: "desc" },
+    map:  { asc: "map",     desc: "map_desc",  first: "asc"  },
+    ping: { asc: "ping",    desc: "ping_desc", first: "asc"  },
+    wipe: { asc: "wipe",    desc: "wipe_desc", first: "asc"  },
+  };
+
+  function sortIndicator(col) {
+    const c = SORT_COLS[col];
+    const cur = els.bfSort.value;
+    if (cur === c.asc)  return `<span class="sort-arrow">▲</span>`;
+    if (cur === c.desc) return `<span class="sort-arrow">▼</span>`;
+    return "";
   }
 
   function renderBrowse(data) {
@@ -712,13 +1018,38 @@
     }
     const header = `
       <div class="browse-row head">
-        <div>Server</div><div style="text-align:right;">Pop</div>
-        <div>Map</div><div style="text-align:right;">Ping</div>
-        <div>Wipe</div><div style="text-align:right;">Action</div>
+        <div class="sortable" data-sort="name" title="Sort by name">Server${sortIndicator("name")}</div>
+        <div class="sortable" data-sort="pop" style="text-align:right;" title="Sort by population">Pop${sortIndicator("pop")}</div>
+        <div class="sortable" data-sort="map" title="Sort by map">Map${sortIndicator("map")}</div>
+        <div class="sortable" data-sort="ping" style="text-align:right;" title="Sort by ping">Ping${sortIndicator("ping")}</div>
+        <div class="sortable" data-sort="wipe" title="Sort by next wipe">Wipe${sortIndicator("wipe")}</div>
+        <div style="text-align:right;">Action</div>
       </div>`;
-    const body = rows.map(s => {
+    els.browseResults.innerHTML = header + browseRowsHTML(rows);
+  }
+
+  // Zeilen-HTML separat, damit Erst-Render und Nachladen dieselbe Funktion nutzen
+  function browseRowsHTML(rows) {
+    return rows.map(s => {
       const tags = [];
       if (s.tier) tags.push(`<span class="tag tier-${s.tier}">${fmt.escape(s.tier)}</span>`);
+      if (s.region) tags.push(`<span class="tag region">${fmt.escape(String(s.region).toUpperCase())}</span>`);
+      // Gruppenlimit-Chip (aus Name/Tags erkannt): solo/duo/trio/quad/max N
+      if (s.max_group != null) {
+        const GL = {1:"solo", 2:"duo", 3:"trio", 4:"quad"};
+        const lbl = s.max_group === 0 ? "no limit" : (GL[s.max_group] || `max ${s.max_group}`);
+        tags.push(`<span class="tag group" title="Max group size (detected from server name/tags)">${lbl}</span>`);
+      }
+      // Fresh-Wipe-Badge: in den ersten 48h nach Wipe
+      const lw = s.wipe?.last_wipe_ts;
+      const wipeAgeH = lw ? Math.floor((Date.now()/1000 - lw) / 3600) : null;
+      if (wipeAgeH != null && wipeAgeH >= 0 && wipeAgeH < 48) {
+        tags.push(`<span class="tag fresh" title="Wiped ${wipeAgeH}h ago">wiped ${wipeAgeH}h</span>`);
+      }
+      // Pop-Verdacht: mehr Spieler als Slots ohne Queue = vermutlich Fake-Pop
+      if (s.pop_suspect) {
+        tags.push(`<span class="tag suspect" title="Reports more players than slots without a queue — population may be faked">⚠ pop?</span>`);
+      }
       for (const t of (s.tags || []).slice(0, 3)) {
         if (t === s.tier) continue;
         tags.push(`<span class="tag">${fmt.escape(t)}</span>`);
@@ -741,7 +1072,6 @@
           <div class="brow-actions">${btn}</div>
         </div>`;
     }).join("");
-    els.browseResults.innerHTML = header + body;
   }
 
   let filterTimer = null;
@@ -750,10 +1080,24 @@
     filterTimer = setTimeout(() => loadBrowse(false), 250);
   }
   [els.bfQ, els.bfMinPop].forEach(el => el?.addEventListener("input", scheduleFilterReload));
-  [els.bfRegion, els.bfTier, els.bfSort].forEach(el => el?.addEventListener("change", () => loadBrowse(false)));
+  [els.bfRegion, els.bfTier, els.bfSort, els.bfGroup, els.bfWiped].forEach(el => el?.addEventListener("change", () => loadBrowse(false)));
   els.bfRefresh.addEventListener("click", () => loadBrowse(true));
 
   els.browseResults.addEventListener("click", async (e) => {
+    // Klick auf einen sortierbaren Spaltenkopf → Sortierung togglen.
+    // Cache-Key ist nur die Region, d.h. der Re-Fetch trifft den Server-Cache
+    // und zählt nicht gegen das Browse-Rate-Limit.
+    const head = e.target.closest("[data-sort]");
+    if (head) {
+      const c = SORT_COLS[head.dataset.sort];
+      if (!c) return;
+      const cur = els.bfSort.value;
+      els.bfSort.value = cur === c[c.first]
+        ? (c.first === "asc" ? c.desc : c.asc)
+        : c[c.first];
+      loadBrowse(false);
+      return;
+    }
     const btn = e.target.closest("[data-add-from-browse]");
     if (!btn) return;
     const [host, portStr] = btn.dataset.addFromBrowse.split(":");
@@ -1115,6 +1459,10 @@
 
   // postMessage-Bridge: empfange Events vom game-iframe
   window.addEventListener("message", async (e) => {
+    // Ohne Origin-Pruefung koennte eine fremde Seite per window.open() +
+    // postMessage beliebige Spielstaende im Namen des eingeloggten Users posten.
+    if (e.origin !== window.location.origin) return;
+    if (playEls.iframe && e.source !== playEls.iframe.contentWindow) return;
     if (!e.data || typeof e.data !== "object") return;
     if (e.data.type === "rustflap_ready") {
       // Iframe geladen — schick aktuellen best (falls schon geladen)
@@ -1163,7 +1511,9 @@
   (async () => {
     await loadMe();
     loadServers();
+    loadFriends();
     setInterval(loadServers, REFRESH_MS);
+    setInterval(loadFriends, 60000);   // Presence aendert sich minuetlich
   })();
   try {
     const saved = localStorage.getItem(LS_PREFIX + "tab");

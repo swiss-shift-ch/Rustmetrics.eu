@@ -373,6 +373,44 @@ a:hover { color: var(--accent); text-decoration: underline; }
   color: var(--hazmat); border-color: #6a5410;
   background: rgba(232,196,40,0.06);
 }
+.tag.region { color: #9fb4cc; border-color: #38495f; background: rgba(120,150,190,0.06); }
+.tag.group  { color: #a8d8b8; border-color: #2f5a40; background: rgba(120,200,150,0.06); }
+.tag.fresh  { color: #7de08a; border-color: #2f6a38; background: rgba(90,220,110,0.08); }
+.tag.suspect {
+  color: #f0a860; border-color: #7a5220; background: rgba(240,160,60,0.08);
+  cursor: help;
+}
+
+/* Chart-Zeitraum-Umschalter (24h / 7d / 30d) im Detail-Drawer */
+.chart-range { float: right; display: inline-flex; gap: 4px; }
+.chart-range-btn {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 8px; cursor: pointer;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--text-muted);
+}
+.chart-range-btn:hover { color: var(--text); }
+.chart-range-btn.is-active {
+  color: var(--accent-bright); border-color: var(--accent-deep);
+  background: var(--accent-bg);
+}
+
+/* Peak / Avg / Uptime unter dem Population-Chart */
+.hist-stats {
+  display: flex; gap: 16px; padding: 6px 2px 0;
+  font-size: 11px; color: var(--text-dim);
+}
+.hist-stats strong { color: var(--text); font-weight: 700; }
+
+/* Hinweis: Server blockt A2S_PLAYER (keine Namen verfuegbar) */
+.list-blocked-note {
+  padding: 8px 10px; margin-bottom: 6px;
+  font-size: 11px; color: var(--text-dim);
+  border: 1px dashed var(--border-strong); border-radius: 2px;
+  background: rgba(255,255,255,0.02);
+}
 
 .card-body { padding: 12px 14px; flex: 1 1 auto; }
 
@@ -595,6 +633,10 @@ a:hover { color: var(--accent); text-decoration: underline; }
   text-align: right;
 }
 
+/* [hidden] muss jede display-Regel schlagen — sonst bleibt z.B. der
+   Browse-Spinner sichtbar, obwohl JS ihn auf hidden=true setzt. */
+[hidden] { display: none !important; }
+
 .browse-loading {
   display: flex; align-items: center; gap: 14px;
   padding: 24px;
@@ -649,6 +691,66 @@ a:hover { color: var(--accent); text-decoration: underline; }
   border-bottom: 1px solid var(--border-strong);
 }
 .browse-row.head:hover { background: rgba(0,0,0,0.4); }
+
+/* Klickbare Spaltenköpfe (Sortierung) */
+.browse-row.head .sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.1s;
+}
+.browse-row.head .sortable:hover { color: var(--text); }
+.sort-arrow {
+  color: var(--red);
+  font-size: 8px;
+  margin-left: 3px;
+  vertical-align: 1px;
+}
+
+/* Freunde, die gerade Rust spielen */
+.friends-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.friends-head {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 8px;
+}
+.friends-head strong { color: var(--text); }
+.friends-count { margin-left: auto; font-size: 10px; }
+.friends-list { display: flex; flex-direction: column; gap: 4px; }
+.friend {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 2px; font-size: 13px;
+  background: var(--bg-table-row);
+}
+.friend-av { width: 20px; height: 20px; border-radius: 2px; }
+.friend-name { font-weight: 600; }
+.friend-where { color: var(--text-dim); font-size: 12px;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.friend-act { margin-left: auto; }
+
+/* Aufgeloester Platzhaltername in der Online-Liste */
+.p.is-alias {
+  background: rgba(232,196,40,0.10);
+  border-left: 2px solid var(--yellow, #e8c428);
+  opacity: 1 !important;              /* nicht ausgrauen wie den Rest der Fake-Liste */
+}
+.alias-raw { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
+
+/* Steam-presence badge on watched players */
+.steam-tag {
+  background: #1b2838;            /* Steam-dunkelblau */
+  color: #66c0f4;                 /* Steam-hellblau */
+  border: 1px solid #2a475e;
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
 
 .brow-name { min-width: 0; }
 .brow-name strong {

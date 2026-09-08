@@ -50,7 +50,7 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260519a" />
+<link rel="stylesheet" href="/style.css?v=20260819a" />
 </head>
 <body>
 
@@ -141,6 +141,15 @@
           </p>
         </section>
 
+        <section class="friends-section" id="friends-section" hidden>
+          <div class="friends-head">
+            <strong>Friends playing Rust now</strong>
+            <span id="friends-count" class="friends-count"></span>
+            <button type="button" id="friends-refresh" class="btn-ghost" title="Refresh">⟳</button>
+          </div>
+          <div id="friends-list" class="friends-list"></div>
+        </section>
+
         <section class="servers-section">
           <div id="servers-empty" class="empty-state" hidden>
             <h2>No servers in your watchlist yet.</h2>
@@ -159,33 +168,51 @@
 
       <form id="browse-filter" class="browse-filter">
         <input type="search" id="bf-q" placeholder="Search server names …" />
-        <select id="bf-region" title="Region">
-          <option value="all">All regions</option>
-          <option value="eu" selected>Europe</option>
-          <option value="us-e">US East</option>
-          <option value="us-w">US West</option>
-          <option value="sa">South America</option>
-          <option value="asia">Asia</option>
-          <option value="au">Australia</option>
-          <option value="me">Middle East</option>
-          <option value="af">Africa</option>
+        <select id="bf-region" title="Region (official Rust region tag)">
+          <option value="all" selected>All regions</option>
+          <option value="eu">Europe (EU)</option>
+          <option value="na">North America (NA)</option>
+          <option value="sa">South America (SA)</option>
+          <option value="wa">West Asia (WA)</option>
+          <option value="ea">East Asia (EA)</option>
+          <option value="asia">Asia (WA+EA)</option>
+          <option value="oc">Oceania (OC)</option>
+          <option value="af">Africa (AF)</option>
         </select>
-        <select id="bf-tier" title="Tier">
-          <option value="all">All tiers</option>
+        <select id="bf-tier" title="Category">
+          <option value="all">All</option>
           <option value="vanilla">Vanilla</option>
-          <option value="2x">2x</option>
-          <option value="3x">3x</option>
-          <option value="5x">5x</option>
-          <option value="10x">10x</option>
-          <option value="pve">PvE</option>
+          <option value="community">Community</option>
           <option value="modded">Modded</option>
+          <option value="pve">PvE</option>
+        </select>
+        <select id="bf-group" title="Max group size (solo/duo/trio…) — detected from server name/tags">
+          <option value="all" selected>Any group</option>
+          <option value="1">Solo</option>
+          <option value="2">Duo (max 2)</option>
+          <option value="3">Trio (max 3)</option>
+          <option value="4">Quad (max 4)</option>
+          <option value="5plus">Max 5+</option>
+          <option value="nolimit">No limit</option>
+        </select>
+        <select id="bf-wiped" title="Wipe freshness">
+          <option value="0" selected>Any wipe</option>
+          <option value="24">Wiped &lt; 24h</option>
+          <option value="48">Wiped &lt; 48h</option>
+          <option value="168">Wiped &lt; 7d</option>
         </select>
         <select id="bf-sort" title="Sort">
           <option value="pop_desc">Pop ↓</option>
           <option value="pop_asc">Pop ↑</option>
-          <option value="name">Name</option>
-          <option value="ping">Ping</option>
-          <option value="wipe">Wipe date</option>
+          <option value="name">Name A–Z</option>
+          <option value="name_desc">Name Z–A</option>
+          <option value="map">Map A–Z</option>
+          <option value="map_desc">Map Z–A</option>
+          <option value="ping">Ping ↑</option>
+          <option value="ping_desc">Ping ↓</option>
+          <option value="wipe">Wipe soonest</option>
+          <option value="wipe_desc">Wipe latest</option>
+          <option value="fresh">Just wiped</option>
         </select>
         <label class="bf-pop">
           Min pop
@@ -396,6 +423,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260519a"></script>
+<script src="/app.js?v=20260819b"></script>
 </body>
 </html>

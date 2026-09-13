@@ -2436,9 +2436,13 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
 <meta property="og:title" content="{_esc(name or host)}" />
 <meta property="og:description" content="{_esc(og_description)}" />
 <meta property="og:url" content="https://rustmetrics.eu/server/{_esc(host)}:{port}" />
-<meta name="twitter:card" content="summary" />
+<meta property="og:image" content="https://rustmetrics.eu/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="{_esc(name or host)}" />
 <meta name="twitter:description" content="{_esc(og_description)}" />
+<meta name="twitter:image" content="https://rustmetrics.eu/og-image.png" />
 <link rel="stylesheet" href="/style.css" />
 </head><body>
 
@@ -3530,9 +3534,13 @@ def render_player_profile_page(bm_id: int) -> tuple[str, int]:
 <meta property="og:title" content="{_esc(name)}" />
 <meta property="og:description" content="{_esc(og_description)}" />
 <meta property="og:url" content="https://rustmetrics.eu/player/{int(bm_id)}" />
-<meta name="twitter:card" content="summary" />
+<meta property="og:image" content="https://rustmetrics.eu/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="{_esc(name)}" />
 <meta name="twitter:description" content="{_esc(og_description)}" />
+<meta name="twitter:image" content="https://rustmetrics.eu/og-image.png" />
 <link rel="stylesheet" href="/style.css?v=20260517d" />
 </head><body>
 

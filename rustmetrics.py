@@ -61,6 +61,7 @@ from rm_rust import (  # noqa: F401
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
+from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
 
 
 _bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False, "paused_until": 0.0}
@@ -910,18 +911,22 @@ def create_session(user_id: int, ip: str = "", ua: str = "") -> str:
 
 def lookup_session(token: str) -> dict | None:
     if not token: return None
+    now = int(time.time())
     with _Conn() as (conn, cur):
         cur.execute(
-            "SELECT s.user_id, s.expires_at, u.display_name, u.avatar_url, u.is_admin "
+            "SELECT s.user_id, s.expires_at, u.display_name, u.avatar_url, u.is_admin, u.last_seen_at "
             "FROM sessions s JOIN users u ON u.id = s.user_id "
             "WHERE s.token = %s",
             (token,),
         )
         row = cur.fetchone()
         if not row: return None
-        if row["expires_at"] < int(time.time()):
+        if row["expires_at"] < now:
             cur.execute("DELETE FROM sessions WHERE token=%s", (token,))
             return None
+        # Aktivitaet fuer /admin/stats: gedrosselt, damit nicht jeder Request schreibt
+        if should_touch_last_seen(row["last_seen_at"], now):
+            cur.execute("UPDATE users SET last_seen_at=%s WHERE id=%s", (now, row["user_id"]))
         return dict(row)
 
 
@@ -2788,7 +2793,7 @@ def admin_stats_data() -> dict:
         for k, secs in [("active_1h", 3600), ("active_24h", 86400),
                         ("active_7d", 7 * 86400), ("active_30d", 30 * 86400)]:
             cur.execute(
-                "SELECT COUNT(*) AS c FROM users WHERE last_login_at > %s AND NOT is_ghost",
+                f"SELECT COUNT(*) AS c FROM users WHERE {ACTIVITY_TS_SQL} > %s AND NOT is_ghost",
                 (now - secs,))
             data[k] = cur.fetchone()["c"]
 
@@ -3081,7 +3086,7 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
     <dl class="detail-meta">
       <dt>Total signups (lifetime)</dt><dd>{fnum(d['users_total'])}</dd>
       <dt>Active sessions now</dt><dd>{fnum(d['sessions_active'])}</dd>
-      <dt>Active last 1h / 24h / 7d / 30d</dt>
+      <dt>Active last 1h / 24h / 7d / 30d <small>(last seen, else last login)</small></dt>
       <dd>{fnum(d['active_1h'])} · {fnum(d['active_24h'])} · {fnum(d['active_7d'])} · {fnum(d['active_30d'])}</dd>
       <dt>New signups 24h / 7d / 30d</dt>
       <dd>{fnum(d['new_24h'])} · {fnum(d['new_7d'])} · {fnum(d['new_30d'])}</dd>

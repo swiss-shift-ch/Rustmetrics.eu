@@ -161,6 +161,9 @@ CREATE INDEX IF NOT EXISTS idx_game_scores_game_score ON game_scores(game, score
 -- Spalte bleibt, weil /admin/stats darauf filtert; Ghosts werden nicht mehr angelegt.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_ghost BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Letzte Aktivitaet eingeloggter Nutzer (Unix-Sekunden), max. 1x pro Stunde bei Session-Lookup gesetzt.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at BIGINT;
+
 -- Entfernt früher geseedete Demo-Spieler; game_scores folgt per ON DELETE CASCADE.
 -- Idempotent, init.sql bleibt re-runnable.
 DELETE FROM users WHERE is_ghost;

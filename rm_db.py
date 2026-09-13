@@ -84,6 +84,7 @@ def ensure_migrations():
              "ALTER TABLE servers ADD COLUMN is_anonymized BOOLEAN NOT NULL DEFAULT FALSE"),
             ("watched_players", "bm_player_id",
              "ALTER TABLE watched_players ADD COLUMN bm_player_id BIGINT"),
+            ("users", "last_seen_at", "ALTER TABLE users ADD COLUMN last_seen_at BIGINT"),
         ):
             if not _column_exists(cur, tbl, col):
                 todo.append(ddl)

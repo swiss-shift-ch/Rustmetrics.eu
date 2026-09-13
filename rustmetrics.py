@@ -51,6 +51,8 @@ from rm_config import (  # noqa: F401
     STEAM_REGION_ALL, REGION_BYTES, COOKIE_NAME,
 )
 from rm_a2s import query_a2s  # noqa: F401
+from rm_rhythm import (ACTION_CLOSE, ACTION_OPEN, RHYTHM_WINDOW_SEC, build_rhythm,
+                       presence_session_actions)
 from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist,
                               looks_randomized, names_look_real, should_use_bm_names)
 from rm_rust import (  # noqa: F401
@@ -1496,6 +1498,7 @@ def _cleanup_old(cur):
         if cur.rowcount < 20000:
             break
     cur.execute("DELETE FROM player_sessions WHERE end_ts IS NOT NULL AND end_ts < %s", (cutoff,))
+    cur.execute("DELETE FROM presence_sessions WHERE end_ts IS NOT NULL AND end_ts < %s", (cutoff,))
     cur.execute("DELETE FROM sessions WHERE expires_at < %s", (int(time.time()),))
     # Verwaiste Server löschen (die niemand mehr watcht und seit 7+ Tagen keine Snapshots)
     cur.execute(
@@ -1665,6 +1668,34 @@ def _notify_steam_presence(cur, steam_id: int, persona: str,
         fire_discord_webhook_async(row["discord_webhook"], embed)
 
 
+def _open_presence_sessions(cur, steam_ids: list[int]) -> dict[int, dict]:
+    """Offene Presence-Session pro SteamID (id, server_addr)."""
+    cur.execute("SELECT id, steam_id, server_addr FROM presence_sessions "
+                "WHERE end_ts IS NULL AND steam_id = ANY(%s::bigint[])", (steam_ids,))
+    return {int(r["steam_id"]): dict(r) for r in cur.fetchall()}
+
+
+def _sync_presence_session(cur, steam_id: int, open_row: dict | None,
+                           in_rust: bool, server_addr: str | None, now: int) -> None:
+    """Oeffnet/schliesst presence_sessions gemaess presence_session_actions()."""
+    actions = presence_session_actions(open_row is not None,
+                                       (open_row or {}).get("server_addr"),
+                                       in_rust, server_addr)
+    if ACTION_CLOSE in actions:
+        cur.execute("UPDATE presence_sessions SET end_ts=%s WHERE id=%s",
+                    (now, open_row["id"]))
+    if ACTION_OPEN in actions:
+        cur.execute("INSERT INTO presence_sessions (steam_id, server_addr, start_ts) "
+                    "VALUES (%s,%s,%s)", (steam_id, server_addr, now))
+
+
+def _close_untracked_presence_sessions(cur, tracked_ids: list[int], now: int) -> None:
+    """Niemand watcht die SteamID mehr -> offene Session beenden, sonst liefe sie ewig."""
+    cur.execute("UPDATE presence_sessions SET end_ts=%s "
+                "WHERE end_ts IS NULL AND NOT (steam_id = ANY(%s::bigint[]))",
+                (now, tracked_ids))
+
+
 def steam_presence_loop():
     """
     Pollt Steam-Presence für alle per SteamID gewatchten Spieler.
@@ -1680,6 +1711,7 @@ def steam_presence_loop():
                 cur.execute("SELECT DISTINCT steam_id FROM watched_players "
                             "WHERE steam_id IS NOT NULL")
                 ids = [int(r["steam_id"]) for r in cur.fetchall()]
+                _close_untracked_presence_sessions(cur, ids, int(time.time()))
             if ids:
                 summaries = fetch_player_summaries(ids)
                 now = int(time.time())
@@ -1687,6 +1719,7 @@ def steam_presence_loop():
                     cur.execute("SELECT * FROM steam_presence WHERE steam_id = ANY(%s)",
                                 (ids,))
                     old = {int(r["steam_id"]): dict(r) for r in cur.fetchall()}
+                    open_sessions = _open_presence_sessions(cur, ids)
                     for sid64 in ids:
                         s = summaries.get(sid64)
                         if s is None:
@@ -1708,6 +1741,8 @@ def steam_presence_loop():
                             " in_rust=EXCLUDED.in_rust, server_addr=EXCLUDED.server_addr, "
                             " updated_at=EXCLUDED.updated_at",
                             (sid64, persona, visible, in_rust, server_addr, now))
+                        _sync_presence_session(cur, sid64, open_sessions.get(sid64),
+                                               in_rust, server_addr, now)
                         event = presence_transition(o, in_rust, server_addr)
                         if event:
                             was_addr = o.get("server_addr") if o else None
@@ -2255,6 +2290,49 @@ def remove_watch_player(user_id: int, watch_id: int):
     with _Conn() as (conn, cur):
         cur.execute("DELETE FROM watched_players WHERE id=%s AND user_id=%s",
                     (watch_id, user_id))
+
+
+RHYTHM_MAX_ROWS = 2000   # pro Quelle; 7 Tage mit Minutentakt-Sessions bleiben weit darunter
+
+
+def _presence_session_rows(cur, steam_id: int | None, since: int, now: int) -> list[tuple]:
+    if not steam_id:
+        return []
+    cur.execute("SELECT start_ts, end_ts FROM presence_sessions "
+                "WHERE steam_id=%s AND start_ts < %s AND (end_ts IS NULL OR end_ts > %s) "
+                "ORDER BY start_ts LIMIT %s", (steam_id, now, since, RHYTHM_MAX_ROWS))
+    return [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
+
+
+def _server_session_rows(cur, watched: dict, since: int, now: int) -> list[tuple]:
+    """player_sessions per Name auf dem gewatchten Server, zusaetzlich per BM-ID (alle Server)."""
+    window = "start_ts < %s AND (end_ts IS NULL OR end_ts > %s)"
+    cur.execute(f"SELECT start_ts, end_ts FROM player_sessions WHERE server_id=%s "
+                f"AND lower(player_name)=lower(%s) AND {window} ORDER BY start_ts LIMIT %s",
+                (watched["server_id"], watched["name"], now, since, RHYTHM_MAX_ROWS))
+    rows = [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
+    if not watched.get("bm_player_id"):
+        return rows
+    cur.execute(f"SELECT start_ts, end_ts FROM player_sessions WHERE bm_player_id=%s "
+                f"AND {window} ORDER BY start_ts LIMIT %s",
+                (watched["bm_player_id"], now, since, RHYTHM_MAX_ROWS))
+    return rows + [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
+
+
+def api_player_rhythm(user_id: int, watch_id: int) -> dict | None:
+    """Online-Rhythmus eines gewatchten Spielers; None, wenn er nicht auf DIESER User-Watchlist steht."""
+    now = int(time.time())
+    since = now - RHYTHM_WINDOW_SEC
+    with _Conn() as (conn, cur):
+        cur.execute("SELECT server_id, name, steam_id, bm_player_id FROM watched_players "
+                    "WHERE id=%s AND user_id=%s", (watch_id, user_id))
+        watched = cur.fetchone()
+        if not watched:
+            return None
+        watched = dict(watched)
+        steam_rows = _presence_session_rows(cur, watched.get("steam_id"), since, now)
+        server_rows = _server_session_rows(cur, watched, since, now)
+    return build_rhythm(steam_rows, server_rows, now)
 
 
 def _esc(s) -> str:
@@ -3821,6 +3899,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(api_friends_in_rust(sess["user_id"]))
             except Exception as e:
                 return self._fail(e, "friends")
+        if u.path.startswith("/api/me/players/"):
+            return self._api_player_rhythm(u.path)
         if u.path.startswith("/api/server/"):
             parts = u.path.strip("/").split("/")
             if len(parts) == 3:
@@ -4281,6 +4361,27 @@ class Handler(SimpleHTTPRequestHandler):
                 "webcal_url": cal_webcal,
             },
         })
+
+    MAX_PG_INT = 2**31 - 1   # watched_players.id ist SERIAL
+
+    def _api_player_rhythm(self, path: str):
+        """GET /api/me/players/<watched_player_id>/rhythm — nur fuer den eigenen Watchlist-Eintrag."""
+        parts = path.strip("/").split("/")
+        if len(parts) != 5 or parts[4] != "rhythm":
+            return self._json({"error": "not found"}, 404)
+        sess = self._read_session()
+        if not sess: return self._json({"error": "auth required"}, 401)
+        try: wid = int(parts[3])
+        except ValueError: return self._json({"error": "bad id"}, 400)
+        if not 0 < wid <= self.MAX_PG_INT:
+            return self._json({"error": "bad id"}, 400)
+        try:
+            data = api_player_rhythm(sess["user_id"], wid)
+        except Exception as e:
+            return self._fail(e, "player_rhythm")
+        # Fremde und nicht existierende Eintraege gleich behandeln (keine ID-Enumeration)
+        if data is None: return self._json({"error": "not found"}, 404)
+        return self._json(data)
 
     def _api_save_settings(self, user_id: int):
         body = self._read_json()

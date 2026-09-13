@@ -110,6 +110,14 @@ def ensure_migrations():
                    server_addr TEXT,
                    updated_at  BIGINT NOT NULL DEFAULT 0
                )""")
+        if not _table_exists(cur, "presence_sessions"):
+            todo.append("""CREATE TABLE presence_sessions (
+                   id          BIGSERIAL PRIMARY KEY,
+                   steam_id    BIGINT NOT NULL,
+                   server_addr TEXT,
+                   start_ts    BIGINT NOT NULL,
+                   end_ts      BIGINT
+               )""")
         if not _table_exists(cur, "traffic_daily"):
             todo.append("""CREATE TABLE traffic_daily (
                    day            DATE PRIMARY KEY,
@@ -140,6 +148,10 @@ _WANTED_INDEXES = [
     # stuendlicher Cleanup-DELETE lief bisher ohne passenden Index
     ("idx_snapshots_ts",
      "CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON snapshots(ts)"),
+    # Online-Rhythmus: Sessions einer SteamID im Zeitfenster
+    ("idx_presence_sessions_steam",
+     "CREATE INDEX IF NOT EXISTS idx_presence_sessions_steam "
+     "ON presence_sessions(steam_id, start_ts)"),
     ("idx_psessions_endts",
      "CREATE INDEX IF NOT EXISTS idx_psessions_endts "
      "ON player_sessions(end_ts) WHERE end_ts IS NOT NULL"),

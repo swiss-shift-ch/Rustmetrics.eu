@@ -56,7 +56,7 @@ from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist
 from rm_rust import (  # noqa: F401
     parse_rust_keywords, detect_rust_tier, detect_rust_category,
     detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
-    next_wipe_estimate, _REGION_FILTER_ALIASES, _REGION_GROUPS,
+    next_wipe_estimate, pick_bm_server_id, _REGION_FILTER_ALIASES, _REGION_GROUPS,
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
@@ -395,21 +395,10 @@ def _bm_search_id(host: str, port: int) -> int | None:
         url = (BATTLEMETRICS_URL + "?" + urllib.parse.urlencode({
             "filter[game]":    "rust",
             "filter[search]":  host,
-            "page[size]":      "10",
+            "page[size]":      "25",
         }))
         payload = bm_get(url, timeout=8)
-        # Erst exakter IP+Port-Match
-        for s in payload.get("data", []):
-            a = s.get("attributes") or {}
-            if a.get("ip") == host and a.get("port") == port:
-                try: return int(s.get("id"))
-                except (TypeError, ValueError): pass
-        # Sonst: erster Match auf gleicher IP (Port-Mismatch z.B. weil Game-Port ≠ Query-Port)
-        for s in payload.get("data", []):
-            a = s.get("attributes") or {}
-            if a.get("ip") == host:
-                try: return int(s.get("id"))
-                except (TypeError, ValueError): pass
+        return pick_bm_server_id(payload.get("data") or [], host, port)
     except Exception as e:
         print(f"[bm_search] {host}:{port}: {e}", file=sys.stderr, flush=True)
     return None

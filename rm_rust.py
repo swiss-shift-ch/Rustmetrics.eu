@@ -210,6 +210,20 @@ def detect_rust_group_limit(name, tags) -> int | None:
     return None
 
 
+def pick_bm_server_id(results: list[dict], host: str, port: int) -> int | None:
+    """BattleMetrics server id for host:port; a different-port match on the same IP counts only if it is the only one."""
+    same_ip = [s for s in results if (s.get("attributes") or {}).get("ip") == host]
+    by_query_port = [s for s in same_ip if s["attributes"].get("portQuery") == port]
+    by_game_port = [s for s in same_ip if s["attributes"].get("port") == port]
+    candidates = by_query_port or by_game_port or (same_ip if len(same_ip) == 1 else [])
+    if not candidates:
+        return None
+    try:
+        return int(candidates[0].get("id"))
+    except (TypeError, ValueError):
+        return None
+
+
 ANON_DETECTION_MIN_NAMES = 15
 
 

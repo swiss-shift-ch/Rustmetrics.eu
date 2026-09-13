@@ -319,7 +319,7 @@
 
   function renderWatchlistSub(s) {
     const anonWarn = s.name_anonymized ? `
-      <div class="anon-warn anon-warn-compact" title="Facepunch streamer mode / censorplayerlist — name-watching won't work here, even BattleMetrics gets the same fake names. Workaround: add players by SteamID64 or Steam profile URL instead — Steam presence tracking sees them anyway (requires their profile's game details to be public).">
+      <div class="anon-warn anon-warn-compact" title="Facepunch streamer mode / censorplayerlist — this server's public player list shows random names, so name-watching won't work here. Workaround: add players by SteamID64 or Steam profile URL instead — Steam presence tracking sees them anyway (requires their profile's game details to be public).">
         ⚠ Names randomized here — <strong>use SteamID64 instead</strong> <span class="anon-warn-info">ⓘ</span>
       </div>` : "";
     const items = (s.watched_players || []).map(w => {

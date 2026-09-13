@@ -53,7 +53,7 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260913o" />
+<link rel="stylesheet" href="/style.css?v=20260914a" />
 </head>
 <body>
 
@@ -425,6 +425,20 @@
   </div>
 </aside>
 
+<aside id="rhythm-modal" class="rhythm-modal" hidden>
+  <div class="rhythm-overlay" data-close-rhythm></div>
+  <div class="rhythm-panel" role="dialog" aria-modal="true" aria-labelledby="rhythm-title">
+    <header class="rhythm-header">
+      <div class="rhythm-heading">
+        <h2 id="rhythm-title">Player</h2>
+        <span class="rhythm-sub">Online rhythm · last 7 days · your local time</span>
+      </div>
+      <button class="rhythm-close" type="button" data-close-rhythm aria-label="Close">×</button>
+    </header>
+    <div class="rhythm-body" id="rhythm-body"></div>
+  </div>
+</aside>
+
 <div id="cookie-banner" class="cookie-banner" hidden>
   <span>RustMetrics sets a single <strong>essential session cookie</strong>
         (<code>rm_session</code>) when you sign in with Steam. No tracking, no third parties,
@@ -444,6 +458,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260913o"></script>
+<script src="/app.js?v=20260914a"></script>
 </body>
 </html>

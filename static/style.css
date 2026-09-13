@@ -1557,3 +1557,83 @@ a.player-name.plink:hover {
   gap: 24px;
 }
 .server-grid.view-list .card-body { padding-bottom: 10px; }
+
+/* ─── Online-Rhythmus (Watchlist-Heatmap, 7 × 24) ─────────────────────── */
+.btn-rhythm {
+  background: none;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  cursor: pointer; font-size: 11px; line-height: 1;
+  padding: 2px 5px; flex-shrink: 0;
+  transition: color 0.12s, border-color 0.12s;
+}
+.btn-rhythm:hover, .btn-rhythm:focus-visible {
+  color: var(--accent-bright); border-color: var(--accent-bright);
+}
+.rhythm-modal {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.rhythm-modal[hidden] { display: none; }
+.rhythm-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(2px);
+}
+.rhythm-panel {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 32px); overflow-y: auto;
+  background: #1c1a19;
+  border: 1px solid var(--accent-deep);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.8);
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+.rhythm-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.rhythm-heading { min-width: 0; }
+.rhythm-header h2 {
+  margin: 0 0 4px 0; font-size: 15px; color: var(--text);
+  overflow-wrap: anywhere;
+}
+.rhythm-sub {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.rhythm-close {
+  background: none; border: none;
+  color: var(--text-dim);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.rhythm-close:hover, .rhythm-close:focus-visible { color: var(--accent-bright); }
+.rhythm-body { padding: 16px 18px; overflow-x: auto; }
+.rhythm-grid {
+  display: grid;
+  grid-template-columns: 34px repeat(24, minmax(16px, 1fr));
+  gap: 2px;
+  min-width: 460px;
+  font-size: 9px; color: var(--text-dim);
+}
+.rhythm-hour { text-align: center; }
+.rhythm-day  { align-self: center; }
+.rhythm-cell {
+  display: block; min-height: 16px;
+  background: rgba(255,255,255,0.04);
+}
+.rhythm-cell.lvl-1 { background: rgba(232,90,62,0.25); }
+.rhythm-cell.lvl-2 { background: rgba(232,90,62,0.50); }
+.rhythm-cell.lvl-3 { background: rgba(232,90,62,0.75); }
+.rhythm-cell.lvl-4 { background: #e85a3e; }
+.rhythm-legend {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  margin-top: 12px;
+  font-size: 10px; color: var(--text-dim);
+}
+.rhythm-legend .rhythm-cell { width: 12px; min-height: 12px; }
+.rhythm-meta { margin-left: auto; }
+.rhythm-empty, .rhythm-status { margin: 0; font-size: 12px; color: var(--text-dim); }
+.rhythm-status.is-error { color: var(--red); }

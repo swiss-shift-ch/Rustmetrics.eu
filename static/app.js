@@ -70,6 +70,9 @@
     calStatus:         $("#cal-status"),
     settingsStatus:    $("#settings-status"),
     drawer:         $("#detail-drawer"),
+    rhythmModal:    $("#rhythm-modal"),
+    rhythmTitle:    $("#rhythm-title"),
+    rhythmBody:     $("#rhythm-body"),
     drawerBody:     $("#drawer-body"),
     drawerTitle:    $("#drawer-title"),
     browseForm:     $("#browse-filter"),
@@ -357,6 +360,9 @@
         <span class="player-dot ${dotCls}"></span>
         ${nameHTML}${steamBadge}
         <span class="player-meta">${meta}</span>
+        <button class="btn-rhythm" type="button" title="Online rhythm — last 7 days"
+          data-rhythm-watch="${w.id}"
+          data-rhythm-name="${fmt.escape((w.steam && w.steam.persona) || w.name)}">▦</button>
         <button class="btn-remove" title="Remove" data-remove-watch="${s.id}:${w.id}">×</button>
       </div>
     `;
@@ -529,6 +535,10 @@
       try { await api(`/api/server/${rmServer}`, { method: "DELETE" }); await loadServers(); }
       catch (err) { alert(err.message); }
       return;
+    }
+    const rhythmBtn = t.closest?.("[data-rhythm-watch]");
+    if (rhythmBtn) {
+      return openRhythm(parseInt(rhythmBtn.dataset.rhythmWatch, 10), rhythmBtn.dataset.rhythmName);
     }
     const rmWatch = t.closest?.("[data-remove-watch]")?.dataset.removeWatch;
     if (rmWatch) {
@@ -723,6 +733,90 @@
       btn.style.opacity = "";
       alert("Couldn't add: " + err.message);
     }
+  });
+
+  // ─── Online-Rhythmus (7 Tage × 24 Stunden, lokale Zeitzone des Viewers) ──
+  // API liefert UTC-Intervalle; das Einsortieren in Wochentag/Stunde passiert
+  // hier, damit die Heatmap in der Zeitzone des Betrachters stimmt.
+  const RHYTHM_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const RHYTHM_LEVEL_LIMITS = [15, 30, 45];   // Minuten-Obergrenzen fuer lvl-1..3, darueber lvl-4
+  const MINUTES_PER_HOUR = 60;
+  let rhythmRequest = 0;
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+
+  function nextLocalHour(ts) {
+    const d = new Date(ts * 1000);
+    const next = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + 1).getTime() / 1000;
+    return next > ts ? next : ts + 3600;   // Schutz gegen DST-Randfaelle
+  }
+
+  function bucketRhythm(intervals) {
+    const seconds = RHYTHM_DAY_LABELS.map(() => new Array(24).fill(0));
+    for (const [start, end] of intervals) {
+      for (let t = start; t < end; ) {
+        const d = new Date(t * 1000);
+        const stop = Math.min(end, nextLocalHour(t));
+        seconds[(d.getDay() + 6) % 7][d.getHours()] += stop - t;
+        t = stop;
+      }
+    }
+    return seconds.map(row => row.map(sec => Math.min(MINUTES_PER_HOUR, Math.round(sec / 60))));
+  }
+
+  function rhythmLevel(minutes) {
+    if (minutes <= 0) return 0;
+    const idx = RHYTHM_LEVEL_LIMITS.findIndex(limit => minutes <= limit);
+    return idx === -1 ? RHYTHM_LEVEL_LIMITS.length + 1 : idx + 1;
+  }
+
+  function renderRhythm(data) {
+    if (!data.available) {
+      return `<p class="rhythm-empty">No online sessions recorded for this player in the last ${data.days} days.</p>`;
+    }
+    const grid = bucketRhythm(data.intervals || []);
+    const hourHead = Array.from({ length: 24 }, (_, h) => `<span class="rhythm-hour">${pad2(h)}</span>`).join("");
+    const rows = grid.map((row, day) =>
+      `<span class="rhythm-day">${RHYTHM_DAY_LABELS[day]}</span>` +
+      row.map((min, h) =>
+        `<span class="rhythm-cell lvl-${rhythmLevel(min)}" title="${RHYTHM_DAY_LABELS[day]} ${pad2(h)}:00 — ${min} min online"></span>`
+      ).join("")
+    ).join("");
+    const legend = [0, 1, 2, 3, 4].map(l => `<span class="rhythm-cell lvl-${l}"></span>`).join("");
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+    const sources = (data.sources || []).join(" + ");
+    return `
+      <div class="rhythm-grid"><span></span>${hourHead}${rows}</div>
+      <div class="rhythm-legend">
+        <span>less</span>${legend}<span>more</span>
+        <span class="rhythm-meta">last ${data.days} days · ${fmt.escape(tz)} · source: ${fmt.escape(sources)}</span>
+      </div>`;
+  }
+
+  async function openRhythm(watchId, name) {
+    if (!Number.isInteger(watchId) || watchId <= 0) return;
+    const req = ++rhythmRequest;
+    els.rhythmTitle.textContent = name || "Player";
+    els.rhythmBody.innerHTML = `<p class="rhythm-status">Loading …</p>`;
+    els.rhythmModal.hidden = false;
+    try {
+      const data = await api(`/api/me/players/${watchId}/rhythm`);
+      if (req !== rhythmRequest) return;
+      els.rhythmBody.innerHTML = renderRhythm(data);
+    } catch (e) {
+      if (req !== rhythmRequest) return;
+      els.rhythmBody.innerHTML = `<p class="rhythm-status is-error">Error: ${fmt.escape(e.message)}</p>`;
+    }
+  }
+
+  function closeRhythm() {
+    rhythmRequest++;   // laufende Antwort verwerfen
+    els.rhythmModal.hidden = true;
+  }
+  document.querySelectorAll("[data-close-rhythm]").forEach(el =>
+    el.addEventListener("click", closeRhythm));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !els.rhythmModal.hidden) closeRhythm();
   });
 
   async function openDetail(sid) {

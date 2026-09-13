@@ -481,6 +481,16 @@ a:hover { color: var(--accent); text-decoration: underline; }
   color: var(--hazmat);
   line-height: 1.4;
 }
+.anon-warn-compact {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+.anon-warn-info {
+  opacity: 0.7;
+}
+
 
 .watched-player {
   display: flex; align-items: center; gap: 8px;
@@ -668,7 +678,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
 
 .browse-row {
   display: grid;
-  grid-template-columns: 1fr 90px 130px 70px 80px 110px;
+  grid-template-columns: 1fr 90px 130px 80px 110px;
   gap: 12px; align-items: center;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
@@ -1476,3 +1486,72 @@ a.player-name.plink:hover {
   .btn-steam-long { display: none; }
   .user-chip-name { max-width: 70px; }
 }
+
+.brow-logo {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: 6px;
+  object-fit: cover;
+  background: #1a1a1a;
+}
+.card-logo {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: 6px;
+  object-fit: cover;
+  background: #1a1a1a;
+}
+
+.btn-player-list {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.btn-player-list:hover {
+  background: var(--accent);
+  color: #0b0b0b;
+}
+
+/* ─── Watchlist Toolbar (View-Toggle + Clear) ──────────────────────────── */
+.servers-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.view-toggle { display: flex; gap: 4px; }
+.view-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.view-btn:hover { border-color: var(--accent); color: var(--text); }
+.view-btn.is-active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+/* List-View: eine Spalte, Karten kompakter (Stats horizontal statt Grid) */
+.server-grid.view-list {
+  grid-template-columns: 1fr;
+}
+.server-grid.view-list .card-stats {
+  grid-template-columns: repeat(4, auto);
+  gap: 24px;
+}
+.server-grid.view-list .card-body { padding-bottom: 10px; }

@@ -50,7 +50,7 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260913b" />
+<link rel="stylesheet" href="/style.css?v=20260913i" />
 </head>
 <body>
 
@@ -78,15 +78,15 @@
 <div class="app">
 
   <nav class="sidebar">
-    <button class="nav-item is-active" data-tab="watchlist" aria-label="Watchlist">
+    <button class="nav-item is-active" data-tab="watchlist" aria-label="Watchlist" title="Watchlist">
       <span class="nav-icon" aria-hidden="true">▦</span>
       <span class="nav-label">Watchlist</span>
     </button>
-    <button class="nav-item" data-tab="browse" aria-label="Server browser">
+    <button class="nav-item" data-tab="browse" aria-label="Server browser" title="Server browser">
       <span class="nav-icon" aria-hidden="true">⌖</span>
       <span class="nav-label">Browser</span>
     </button>
-    <button class="nav-item" data-tab="mystats" aria-label="My stats">
+    <button class="nav-item" data-tab="mystats" aria-label="My stats" title="My stats">
       <span class="nav-icon" aria-hidden="true">◆</span>
       <span class="nav-label">My Stats</span>
     </button>
@@ -94,14 +94,14 @@
       <span class="nav-icon" aria-hidden="true">▶</span>
       <span class="nav-label">Play</span>
     </button>
-    <button class="nav-item" data-tab="settings" aria-label="Settings">
+    <button class="nav-item" data-tab="settings" aria-label="Settings" title="Settings">
       <span class="nav-icon" aria-hidden="true">⚙</span>
       <span class="nav-label">Settings</span>
     </button>
 
     <div class="nav-spacer"></div>
 
-    <button class="nav-item nav-item-mini" data-tab="about" aria-label="About">
+    <button class="nav-item nav-item-mini" data-tab="about" aria-label="About" title="About">
       <span class="nav-icon" aria-hidden="true">?</span>
       <span class="nav-label">About</span>
     </button>
@@ -132,8 +132,8 @@
       <div id="auth-only">
         <section class="add-server-section">
           <form id="add-server-form" class="add-form">
-            <input type="text"   id="srv-host" aria-label="Server IP or hostname"placeholder="IP or hostname  (e.g. 192.168.1.1)" required />
-            <input type="number" id="srv-port" aria-label="Query port"placeholder="Query port (28015)" min="1" max="65535" required />
+            <input type="text"   id="srv-host" aria-label="Server IP or hostname" placeholder="IP or hostname  (e.g. 192.168.1.1)" required />
+            <input type="number" id="srv-port" aria-label="Query port" placeholder="Query port (28015)" min="1" max="65535" required />
             <button type="submit" class="btn-primary">+ Server</button>
           </form>
           <p class="hint">
@@ -151,9 +151,21 @@
         </section>
 
         <section class="servers-section">
+          <div id="servers-toolbar" class="servers-toolbar" hidden>
+            <div class="view-toggle" role="group" aria-label="View mode">
+              <button type="button" id="view-grid" class="view-btn is-active" title="Grid view">▦ Grid</button>
+              <button type="button" id="view-list" class="view-btn" title="List view">☰ List</button>
+            </div>
+            <button type="button" id="btn-clear-watchlist" class="btn-ghost" title="Remove all servers from your watchlist">Clear Watchlist</button>
+          </div>
           <div id="servers-empty" class="empty-state" hidden>
             <h2>No servers in your watchlist yet.</h2>
             <p>Head over to the <a href="#" data-go-tab="browse"><strong>Server Browser</strong></a> and pick a few.</p>
+            <p style="font-size:13px; color:var(--text-dim); max-width:480px; margin:8px auto 0;">
+              Watched servers show live pop, map and wipe timers here. Open one and add a
+              player name (or SteamID64) to get notified the moment they come online — even
+              on servers that randomize names.
+            </p>
           </div>
           <div id="servers" class="server-grid"></div>
         </section>
@@ -349,13 +361,15 @@
           <div class="settings-row" style="flex-direction:column; align-items:stretch; gap:8px;">
             <label class="check" style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">Subscribe URL (one-tap in Apple/Google Calendar)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="cal-webcal-url" aria-label="Calendar subscribe URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" placeholder="loading…" />
+              <input type="password" id="cal-webcal-url" aria-label="Calendar subscribe URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" placeholder="loading…" />
+              <button type="button" id="btn-cal-show" class="btn-ghost" title="Toggle visibility — this link lets anyone see your wipe dates, treat it like a password">Show</button>
               <button type="button" id="btn-cal-copy" class="btn-ghost" title="Copy URL to clipboard">Copy</button>
               <a id="cal-webcal-open" href="#" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">Open in Calendar</a>
             </div>
             <label class="check" style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-top:6px;">Or HTTPS URL (for Outlook / web-only clients)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="cal-https-url" aria-label="Calendar HTTPS URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" />
+              <input type="password" id="cal-https-url" aria-label="Calendar HTTPS URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" />
+              <button type="button" id="btn-cal-show-https" class="btn-ghost" title="Toggle visibility — this link lets anyone see your wipe dates, treat it like a password">Show</button>
               <button type="button" id="btn-cal-copy-https" class="btn-ghost" title="Copy HTTPS URL">Copy</button>
             </div>
           </div>
@@ -423,6 +437,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260913b"></script>
+<script src="/app.js?v=20260913i"></script>
 </body>
 </html>

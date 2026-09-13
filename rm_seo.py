@@ -37,7 +37,7 @@ def _browser_row_html(server: dict) -> str:
         f'<div class="brow-pop">{int(server.get("players_count") or 0)}'
         f'<span class="max">/{int(server.get("max_players") or 0)}</span></div>'
         f'<div class="brow-map">{escape(str(server.get("map") or "—"))}</div>'
-        '<div class="brow-ping">—</div><div class="brow-wipe">—</div>'
+        '<div class="brow-wipe">—</div>'
         '<div class="brow-actions"></div></div>'
     )
 

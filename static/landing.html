@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RustMetrics — Rust Server &amp; Player Tracker</title>
+<meta name="description" content="RustMetrics — focused, ad-free server &amp; player tracker for Facepunch Rust. Watchlist with Discord webhook notifications, live server browser, wipe countdown, population charts. Steam login, no email needed." />
+<meta name="keywords" content="rust server tracker, rust player tracker, rust watchlist, rust server status, rust wipe schedule, rust population, facepunch rust" />
+<meta name="theme-color" content="#cd412a" />
+<link rel="canonical" href="https://rustmetrics.eu/" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="shortcut icon" href="/favicon.ico" />
+<link rel="manifest" href="/site.webmanifest" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="RustMetrics" />
+<meta property="og:title" content="RustMetrics — Rust Server &amp; Player Tracker" />
+<meta property="og:description" content="Free, ad-free Rust server &amp; player watchlist with Discord notifications. Login via Steam." />
+<meta property="og:url" content="https://rustmetrics.eu/" />
+<meta property="og:image" content="https://rustmetrics.eu/og-image.png" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="RustMetrics — Rust Server &amp; Player Tracker" />
+<meta name="twitter:description" content="Free, ad-free Rust server &amp; player watchlist with Discord notifications." />
+<meta name="twitter:image" content="https://rustmetrics.eu/og-image.png" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "RustMetrics",
+  "url": "https://rustmetrics.eu/",
+  "description": "Rust server and player tracker for the Facepunch game. Personal watchlist with Discord webhook notifications, live server browser, wipe countdown.",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "creator": {
+    "@type": "Organization",
+    "name": "Swiss-Shift",
+    "url": "https://rustmetrics.eu/imprint"
+  }
+}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  :root{
+    --bg-deepest:#0a0908;
+    --bg-deep:#111010;
+    --bg:#161514;
+    --bg-card:#1c1a19;
+    --bg-card-hover:#231f1d;
+    --border:#2b2725;
+    --border-strong:#413a36;
+    --accent:#cd412a;
+    --accent-bright:#e8613f;
+    --accent-deep:#8a2818;
+    --accent-glow:rgba(205,65,42,0.45);
+    --accent-bg:rgba(205,65,42,0.12);
+    --hazmat:#e8c428;
+    --hazmat-dim:#8a7318;
+    --text:#ece8e4;
+    --text-muted:#a39a92;
+    --text-dim:#786f68;
+    --green:#5fc26b;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg-deep);
+    color:var(--text);
+    font-family:"Roboto Condensed","Trebuchet MS",sans-serif;
+    padding:0 20px;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  .wrap{max-width:1180px; margin:0 auto;}
+  .mono{font-family:"JetBrains Mono","SF Mono",monospace;}
+  h1,h2,h3{font-family:"Oswald",sans-serif; text-wrap:balance; margin:0;}
+  .eyebrow{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;
+    letter-spacing:2.5px;
+    text-transform:uppercase;
+    color:var(--accent-bright);
+    display:flex; align-items:center; gap:8px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px; height:7px;
+    background:var(--accent);
+    box-shadow:0 0 8px var(--accent-glow);
+    animation:pulse 1.8s ease-in-out infinite;
+    flex:none;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.75);}}
+  @media (prefers-reduced-motion:reduce){ .eyebrow::before{animation:none;} }
+
+  .hazard{
+    height:6px;
+    background:repeating-linear-gradient(-45deg,var(--hazmat) 0 14px,#161514 14px 28px);
+    opacity:.85;
+  }
+
+  nav.top{
+    max-width:1180px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 0;
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-family:"Oswald",sans-serif; font-weight:600; font-size:20px; letter-spacing:.5px;}
+  .brand .mark{
+    width:30px; height:30px; background:var(--accent); border-radius:3px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:"JetBrains Mono",monospace; font-weight:700; color:#100c0a; font-size:15px;
+    transform:rotate(-4deg);
+  }
+  .brand b{color:var(--accent-bright);}
+  nav.top .navlinks{display:flex; gap:28px; font-size:14px; color:var(--text-muted);}
+  nav.top .navlinks a:hover{color:var(--text);}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:11px 20px;
+    font-family:"Oswald",sans-serif; font-weight:600; font-size:13px;
+    letter-spacing:1px; text-transform:uppercase;
+    border-radius:3px; text-decoration:none; cursor:pointer;
+    border:1px solid transparent;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+  }
+  .btn:hover{transform:translateY(-1px);}
+  .btn-primary{background:var(--accent); color:#100c0a; box-shadow:0 2px 0 var(--accent-deep);}
+  .btn-primary:hover{background:var(--accent-bright); box-shadow:0 4px 14px var(--accent-glow);}
+  .btn-ghost{background:transparent; border-color:var(--border-strong); color:var(--text);}
+  .btn-ghost:hover{border-color:var(--accent); color:var(--accent-bright);}
+
+  .hero{
+    padding:56px 0 64px;
+    display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center;
+  }
+  .hero h1{
+    font-size:clamp(38px,5.2vw,64px);
+    line-height:1.02;
+    font-weight:700;
+    letter-spacing:-0.5px;
+    margin:16px 0 20px;
+    text-transform:uppercase;
+  }
+  .hero h1 em{
+    font-style:normal;
+    color:var(--accent-bright);
+    -webkit-text-stroke:0;
+  }
+  .hero p.lede{
+    font-size:17px; line-height:1.6; color:var(--text-muted);
+    max-width:52ch;
+    margin:0 0 28px;
+  }
+  .hero .ctas{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:30px;}
+  .hero .microcopy{font-size:12px; color:var(--text-dim); font-family:"JetBrains Mono",monospace;}
+
+  .panel{
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:4px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.6);
+    overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px;
+    border-bottom:1px solid var(--border);
+    background:var(--bg);
+  }
+  .panel-head .dots{display:flex; gap:6px;}
+  .panel-head .dots span{width:9px;height:9px;border-radius:50%;background:var(--border-strong);}
+  .panel-head .title{font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-dim); letter-spacing:1px;}
+  .panel-body{padding:14px;}
+  .mock-row{
+    display:grid; grid-template-columns:1fr 74px 60px;
+    align-items:center; gap:10px;
+    padding:11px 10px;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+  }
+  .mock-row:last-child{border-bottom:none;}
+  .mock-row .name{display:flex; flex-direction:column; gap:3px;}
+  .mock-row .name b{font-weight:500; font-size:13.5px;}
+  .mock-row .name .ip{font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--text-dim);}
+  .mock-row .pop{font-family:"JetBrains Mono",monospace; text-align:right; font-size:13px;}
+  .mock-row .pop .max{color:var(--text-dim);}
+  .mock-row .status{
+    font-family:"JetBrains Mono",monospace; font-size:10px; text-transform:uppercase; letter-spacing:.5px;
+    text-align:right; color:var(--green);
+  }
+  .mock-row.alert{background:linear-gradient(90deg,var(--accent-bg),transparent 60%);}
+  .mock-row.alert .status{color:var(--hazmat);}
+  .mock-ticker{
+    display:flex; align-items:center; gap:8px;
+    padding:9px 14px; border-top:1px solid var(--border);
+    font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--text-dim);
+    background:var(--bg);
+  }
+  .mock-ticker .live-dot{width:6px;height:6px;border-radius:50%;background:var(--hazmat); box-shadow:0 0 6px var(--hazmat); flex:none;}
+
+  .stats{
+    display:grid; grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+    padding:30px 0;
+  }
+  .stat{text-align:center; padding:0 14px; border-right:1px solid var(--border);}
+  .stat:last-child{border-right:none;}
+  .stat .num{
+    font-family:"JetBrains Mono",monospace; font-weight:700; font-size:clamp(24px,3vw,36px);
+    color:var(--accent-bright); font-variant-numeric:tabular-nums;
+  }
+  .stat .lbl{font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-top:6px;}
+
+  section{padding:76px 0;}
+  .section-head{max-width:640px; margin:0 auto 44px;}
+  .section-head h2{font-size:clamp(26px,3.6vw,38px); text-transform:uppercase; margin:10px 0 14px;}
+  .section-head p{color:var(--text-muted); font-size:15.5px; line-height:1.6; max-width:56ch;}
+
+  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .feature{background:var(--bg-card); padding:28px 24px; transition:background .15s ease;}
+  .feature:hover{background:var(--bg-card-hover);}
+  .feature .fico{
+    width:38px; height:38px; border-radius:3px;
+    background:var(--accent-bg); border:1px solid var(--border-strong);
+    display:flex; align-items:center; justify-content:center;
+    font-family:"JetBrains Mono",monospace; font-weight:700; color:var(--accent-bright); font-size:15px;
+    margin-bottom:16px;
+  }
+  .feature h3{font-size:18px; margin-bottom:8px; text-transform:uppercase; letter-spacing:.3px;}
+  .feature p{font-size:14px; line-height:1.6; color:var(--text-muted); margin:0;}
+  .feature code{font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--hazmat); background:rgba(232,196,40,.08); padding:1px 5px; border-radius:2px;}
+
+  .spotlight{
+    display:grid; grid-template-columns:.95fr 1.05fr; gap:48px; align-items:center;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:6px;
+    padding:44px;
+  }
+  .spotlight .tag{
+    display:inline-block; font-family:"JetBrains Mono",monospace; font-size:11px;
+    color:var(--hazmat); border:1px solid var(--hazmat-dim); background:rgba(232,196,40,.08);
+    padding:4px 9px; border-radius:2px; letter-spacing:1px; text-transform:uppercase; margin-bottom:16px;
+  }
+  .spotlight h3{font-size:26px; text-transform:uppercase; margin-bottom:14px; line-height:1.15;}
+  .spotlight p{color:var(--text-muted); font-size:15px; line-height:1.65; margin:0 0 14px;}
+  .compare{border:1px solid var(--border); border-radius:4px; overflow:hidden;}
+  .compare-row{display:grid; grid-template-columns:130px 1fr; font-size:13px;}
+  .compare-row + .compare-row{border-top:1px solid var(--border);}
+  .compare-row .k{padding:13px 14px; background:var(--bg); color:var(--text-dim); font-family:"JetBrains Mono",monospace; font-size:11px; text-transform:uppercase; letter-spacing:.5px;}
+  .compare-row .v{padding:13px 14px; background:var(--bg-card);}
+  .compare-row.bad .v{color:var(--text-dim); text-decoration:line-through; text-decoration-color:var(--accent-deep);}
+  .compare-row.good .v{color:var(--green);}
+
+  .cal-strip{
+    display:flex; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden;
+    margin-top:20px;
+  }
+  .cal-day{flex:1; background:var(--bg-card); padding:14px 10px; text-align:center;}
+  .cal-day .d{font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--text-dim); text-transform:uppercase;}
+  .cal-day .n{font-family:"Oswald",sans-serif; font-size:20px; font-weight:600; margin-top:4px;}
+  .cal-day.wipe{background:var(--accent-bg); border-top:2px solid var(--accent);}
+  .cal-day.wipe .n{color:var(--accent-bright);}
+
+  .cta{
+    text-align:center; padding:80px 0 92px;
+    border-top:1px solid var(--border);
+  }
+  .cta h2{font-size:clamp(28px,4vw,44px); text-transform:uppercase; margin-bottom:16px;}
+  .cta p{color:var(--text-muted); font-size:16px; margin-bottom:30px;}
+  .cta .ctas{display:flex; gap:14px; justify-content:center; flex-wrap:wrap;}
+
+  footer{
+    border-top:1px solid var(--border);
+    padding:26px 0 40px;
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+    font-size:12.5px; color:var(--text-dim);
+  }
+  footer a:hover{color:var(--accent-bright);}
+  footer .flinks{display:flex; gap:18px;}
+  .powered-by{
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; color:var(--text-dim); text-decoration:none;
+    letter-spacing:.3px;
+  }
+  .powered-by b{color:var(--text-muted); font-weight:600;}
+  .powered-by:hover b{color:var(--accent-bright);}
+
+  @media (max-width:860px){
+    .hero{grid-template-columns:1fr;}
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .stat:nth-child(2){border-right:none;}
+    .features{grid-template-columns:1fr;}
+    .spotlight{grid-template-columns:1fr; padding:28px;}
+    nav.top .navlinks{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="top">
+    <div class="brand"><span class="mark">R</span>RUST<b>METRICS</b></div>
+    <div class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#streamer-mode">Streamer Mode</a>
+      <a href="#calendar">Wipe Calendar</a>
+    </div>
+    <a class="btn btn-primary" href="/auth/steam/login">Open App</a>
+  </nav>
+</div>
+
+<div class="hazard"></div>
+
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Live · 10,000+ servers polled right now</div>
+      <h1>Know the second<br>your wipe drops.<br><em>Not the hour after.</em></h1>
+      <p class="lede">RustMetrics watches your servers and your friends' names around the clock — pop, ping, wipe countdown, and who just logged in — so you stop tabbing between BattleMetrics, Discord and a stale spreadsheet.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="/auth/steam/login">Start Watching — Free</a>
+        <a class="btn btn-ghost" href="#features">See what it tracks ↓</a>
+      </div>
+      <div class="microcopy">$ no credit card · no server admin needed · works on any Rust server</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="title">MY WATCHLIST</div>
+      </div>
+      <div class="panel-body">
+        <div class="mock-row">
+          <div class="name"><b>[EU] Stevious 2x Mondays</b><span class="ip">168.100.161.159:28015</span></div>
+          <div class="pop">183<span class="max">/250</span></div>
+          <div class="status">● online</div>
+        </div>
+        <div class="mock-row alert">
+          <div class="name"><b>Rusty Moose | US Monthly</b><span class="ip">205.178.168.52:28015</span></div>
+          <div class="pop">61<span class="max">/225</span></div>
+          <div class="status">wipe · 41m</div>
+        </div>
+        <div class="mock-row">
+          <div class="name"><b>Facepunch 15</b><span class="ip">109.200.194.196:28016</span></div>
+          <div class="pop">201<span class="max">/250</span></div>
+          <div class="status">● online</div>
+        </div>
+      </div>
+      <div class="mock-ticker"><span class="live-dot"></span> <span id="tick-name">aadal</span> just came online on <span id="tick-server">Rusty Moose</span></div>
+    </div>
+  </section>
+
+  <div class="stats">
+    <div class="stat"><div class="num">10,412</div><div class="lbl">Servers indexed</div></div>
+    <div class="stat"><div class="num">60s</div><div class="lbl">Poll interval</div></div>
+    <div class="stat"><div class="num">24/7</div><div class="lbl">Presence tracking</div></div>
+    <div class="stat"><div class="num">0</div><div class="lbl">Tabs left open</div></div>
+  </div>
+
+  <section id="features">
+    <div class="section-head">
+      <div class="eyebrow">What it does</div>
+      <h2>Everything you check manually, checked for you.</h2>
+      <p>Add a server by IP or pick one from the browser. RustMetrics polls it, logs it, and tells you the moment something you care about changes.</p>
+    </div>
+    <div class="features">
+      <div class="feature">
+        <div class="fico">◆</div>
+        <h3>Player Presence</h3>
+        <p>Watch specific names across any of your servers. Get pinged the second they go <code>online</code> or <code>offline</code> — via the app or a Discord webhook.</p>
+      </div>
+      <div class="feature">
+        <div class="fico">⏱</div>
+        <h3>Wipe Timers</h3>
+        <p>Every watched server's next wipe, calculated from its history and pushed to a calendar feed you actually check.</p>
+      </div>
+      <div class="feature">
+        <div class="fico">⌖</div>
+        <h3>Server Browser</h3>
+        <p>Filter 10,000+ live Rust servers by region, group size, wipe schedule and population — the search BattleMetrics should have shipped.</p>
+      </div>
+      <div class="feature">
+        <div class="fico">▤</div>
+        <h3>Pop History</h3>
+        <p>24h / 7d / 30d population charts per server. Spot the real peak hours before you commit a base location.</p>
+      </div>
+      <div class="feature">
+        <div class="fico">⚑</div>
+        <h3>Fake-Pop Flags</h3>
+        <p>Servers reporting more players than slots with no queue get flagged automatically. Know before you queue for a ghost town.</p>
+      </div>
+      <div class="feature">
+        <div class="fico">✉</div>
+        <h3>Discord Alerts</h3>
+        <p>Pipe every online/offline event straight into a channel. Per-account, never shared, three clicks to set up.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="streamer-mode">
+    <div class="spotlight">
+      <div>
+        <span class="tag">The problem nobody else solves</span>
+        <h3>Streamer mode hides your friends' names. We track the SteamID instead.</h3>
+        <p><code style="background:transparent;color:var(--text-muted);padding:0;">censorplayerlist</code> replaces every name on a server's public list with randomized junk — so name-watching, and BattleMetrics, both go blind at the exact moment you need them.</p>
+        <p>RustMetrics tracks Steam presence by SteamID64 instead of in-game name. It sees <code style="background:transparent;color:var(--text-muted);padding:0;">in_rust</code> and the server address straight from Steam, streamer mode or not.</p>
+        <a class="btn btn-ghost" href="/auth/steam/login">Try it on a streamer-mode server →</a>
+      </div>
+      <div class="compare">
+        <div class="compare-row">
+          <div class="k">Name search</div>
+          <div class="v"></div>
+        </div>
+        <div class="compare-row bad">
+          <div class="k">In-game name</div>
+          <div class="v">"xX_Player4471_Xx" (randomized)</div>
+        </div>
+        <div class="compare-row bad">
+          <div class="k">BattleMetrics</div>
+          <div class="v">Same fake name — no visibility</div>
+        </div>
+        <div class="compare-row good">
+          <div class="k">RustMetrics</div>
+          <div class="v">SteamID64 → real presence, real alert</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="calendar">
+    <div class="section-head">
+      <div class="eyebrow">Wipe Calendar</div>
+      <h2>Every wipe, one subscription.</h2>
+      <p>Subscribe once in Apple Calendar, Google Calendar or Outlook. Every server on your watchlist shows up, auto-updating hourly — no more asking Discord "when's wipe."</p>
+    </div>
+    <div class="cal-strip">
+      <div class="cal-day"><div class="d">Mon</div><div class="n">08</div></div>
+      <div class="cal-day"><div class="d">Tue</div><div class="n">09</div></div>
+      <div class="cal-day wipe"><div class="d">Wed</div><div class="n">10</div></div>
+      <div class="cal-day"><div class="d">Thu</div><div class="n">11</div></div>
+      <div class="cal-day"><div class="d">Fri</div><div class="n">12</div></div>
+      <div class="cal-day wipe"><div class="d">Sat</div><div class="n">13</div></div>
+      <div class="cal-day"><div class="d">Sun</div><div class="n">14</div></div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="eyebrow" style="justify-content:center;">Free · takes 30 seconds</div>
+    <h2>Stop refreshing BattleMetrics.</h2>
+    <p>Add your first server and see live pop, ping and wipe countdown before your coffee's cold.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/auth/steam/login">Open RustMetrics</a>
+    </div>
+  </section>
+
+  <footer>
+    <div>© 2026 RustMetrics · not affiliated with Facepunch Studios</div>
+    <div class="flinks">
+      <a href="/imprint">Imprint</a>
+      <a href="/privacy">Privacy</a>
+      <a class="powered-by" href="https://swiss-shift.ch" target="_blank" rel="noopener">Powered by <b>Swiss Shift</b></a>
+    </div>
+  </footer>
+</div>
+
+<script>
+  var names = ["aadal","·en·","Kowalski","dust2god","Nova_","ripstik","J4CKAL","Meridian"];
+  var servers = ["Rusty Moose","Stevious 2x Mondays","Facepunch 15","Atlas EU Monthly","Survivors.gg #3"];
+  var ni = 0;
+  setInterval(function(){
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    ni = (ni + 1) % names.length;
+    var nameEl = document.getElementById("tick-name");
+    var srvEl = document.getElementById("tick-server");
+    if (!nameEl || !srvEl) return;
+    nameEl.textContent = names[ni];
+    srvEl.textContent = servers[ni % servers.length];
+  }, 3200);
+</script>
+</body>
+</html>

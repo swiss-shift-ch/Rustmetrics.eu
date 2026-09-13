@@ -33,6 +33,10 @@
     views:          $$(".view"),
     servers:        $("#servers"),
     serversEmpty:   $("#servers-empty"),
+    serversToolbar: $("#servers-toolbar"),
+    viewGridBtn:    $("#view-grid"),
+    viewListBtn:    $("#view-list"),
+    btnClearWatchlist: $("#btn-clear-watchlist"),
     addForm:        $("#add-server-form"),
     addHost:        $("#srv-host"),
     addPort:        $("#srv-port"),
@@ -59,6 +63,8 @@
     calWebcalOpen:     $("#cal-webcal-open"),
     btnCalCopy:        $("#btn-cal-copy"),
     btnCalCopyHttps:   $("#btn-cal-copy-https"),
+    btnCalShow:        $("#btn-cal-show"),
+    btnCalShowHttps:   $("#btn-cal-show-https"),
     btnCalReset:       $("#btn-cal-reset"),
     calStatus:         $("#cal-status"),
     settingsStatus:    $("#settings-status"),
@@ -313,13 +319,8 @@
 
   function renderWatchlistSub(s) {
     const anonWarn = s.name_anonymized ? `
-      <div class="anon-warn">
-        ⚠ This server randomizes player names (Facepunch streamer mode /
-        <code>censorplayerlist</code>) — name-watching won't work here, even
-        BattleMetrics gets the same fake names.<br />
-        <strong>Workaround:</strong> add players by <strong>SteamID64 or Steam
-        profile URL</strong> below — Steam presence tracking sees them anyway
-        (requires their profile's game details to be public).
+      <div class="anon-warn anon-warn-compact" title="Facepunch streamer mode / censorplayerlist — name-watching won't work here, even BattleMetrics gets the same fake names. Workaround: add players by SteamID64 or Steam profile URL instead — Steam presence tracking sees them anyway (requires their profile's game details to be public).">
+        ⚠ Names randomized here — <strong>use SteamID64 instead</strong> <span class="anon-warn-info">ⓘ</span>
       </div>` : "";
     const items = (s.watched_players || []).map(w => {
       const nameHTML = w.bm_player_id
@@ -362,7 +363,7 @@
           <strong>Watched Players</strong>
           <span>${s.watched_players?.length || 0}</span>
         </div>
-        ${items || `<div class="watchlist-empty">None yet — add names below.</div>`}
+        ${items || `<div class="watchlist-empty">No players watched on this server yet. Add a name below to get notified when they come online.</div>`}
         <form class="add-watch-form" data-add-watch="${s.id}">
           <input type="text" placeholder="Player name — or SteamID64 / profile URL" required />
           <button type="submit">+ Watch</button>
@@ -389,7 +390,7 @@
         <header class="card-header">
           <span class="online-dot ${online ? "" : "is-off"}" title="${online ? "online" : "offline"}"></span>
           <div class="card-header-main">
-            <h3 class="card-title" data-open-detail="${s.id}">${fmt.escape(s.name)}</h3>
+            <h3 class="card-title" data-open-detail="${s.id}">${brandLogoFor(s.name) ? `<img class="card-logo" src="${brandLogoFor(s.name)}" alt="" loading="lazy" />` : ""}${fmt.escape(s.name)}</h3>
             <div class="card-host">${fmt.escape(s.host)}:${s.port}</div>
             <div class="card-tags">${renderTags(s)}</div>
           </div>
@@ -415,6 +416,9 @@
             </div>
           </div>
           ${renderWatchlistSub(s)}
+          <button class="btn-player-list" data-open-detail="${s.id}" title="Full player list, history, chart">
+            ▤ View Player List &amp; History
+          </button>
         </div>
         <footer class="card-footer">
           <span class="last-update">${snap?.error
@@ -423,7 +427,6 @@
                 ? ' · via <a class="via-bm" href="https://www.battlemetrics.com/" target="_blank" rel="noopener">BattleMetrics</a>'
                 : ""}`}</span>
           <span class="wipe-info">${wipe}</span>
-          <button class="btn-small" data-open-detail="${s.id}">Details</button>
           <button class="btn-small danger" data-remove-server="${s.id}" title="Remove">×</button>
         </footer>
       </article>
@@ -434,12 +437,52 @@
     if (!serversCache.length) {
       els.servers.innerHTML = "";
       els.serversEmpty.hidden = false;
+      if (els.serversToolbar) els.serversToolbar.hidden = true;
     } else {
       els.serversEmpty.hidden = true;
+      if (els.serversToolbar) els.serversToolbar.hidden = false;
       els.servers.innerHTML = serversCache.map(renderCard).join("");
     }
     refreshStats();
   }
+
+  // ─── Grid/List View-Toggle (per-Browser gemerkt) ──────────────────────
+  function applyViewMode(mode) {
+    els.servers?.classList.toggle("view-list", mode === "list");
+    els.viewGridBtn?.classList.toggle("is-active", mode !== "list");
+    els.viewListBtn?.classList.toggle("is-active", mode === "list");
+  }
+  (function initViewMode() {
+    let saved = "grid";
+    try { saved = localStorage.getItem("rm_view_mode") || "grid"; } catch (e) {}
+    applyViewMode(saved);
+  })();
+  els.viewGridBtn?.addEventListener("click", () => {
+    applyViewMode("grid");
+    try { localStorage.setItem("rm_view_mode", "grid"); } catch (e) {}
+  });
+  els.viewListBtn?.addEventListener("click", () => {
+    applyViewMode("list");
+    try { localStorage.setItem("rm_view_mode", "list"); } catch (e) {}
+  });
+
+  // ─── Clear Watchlist ───────────────────────────────────────────────
+  els.btnClearWatchlist?.addEventListener("click", async () => {
+    if (!serversCache.length) return;
+    const n = serversCache.length;
+    if (!confirm(`Remove all ${n} server${n === 1 ? "" : "s"} from your watchlist? All collected data will be lost. This can't be undone.`)) return;
+    els.btnClearWatchlist.disabled = true;
+    try {
+      for (const s of serversCache.slice()) {
+        await api(`/api/server/${s.id}`, { method: "DELETE" });
+      }
+      await loadServers();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      els.btnClearWatchlist.disabled = false;
+    }
+  });
 
   function diffNotifications() {
     for (const s of serversCache) {
@@ -771,14 +814,8 @@
     }).join("");
 
     const anonBanner = anon ? `
-      <div class="anon-warn" style="margin-bottom:12px;">
-        ⚠ <strong>Streamer mode active</strong> — this server (<code>censorplayerlist</code>)
-        replaces the whole online list below with random placeholder names. They are
-        <strong>not real players</strong>, and no tool (incl. BattleMetrics) can reveal
-        the real ones from the server query.<br />
-        ✅ <strong>To actually track someone here, add them by SteamID64 or profile URL</strong>
-        — Steam presence works regardless of streamer mode (needs their profile game
-        details set to public).
+      <div class="anon-warn anon-warn-compact" style="margin-bottom:12px;" title="Streamer mode active (censorplayerlist) — the online list below shows random placeholder names, not real players. To track someone here, add them by SteamID64 or profile URL — Steam presence works regardless of streamer mode (needs their profile game details set to public).">
+        ⚠ <strong>Streamer mode</strong> — names below are fake, use SteamID64 to track <span class="anon-warn-info">ⓘ</span>
       </div>` : "";
 
     const steamBox = `
@@ -1016,11 +1053,28 @@
 
   // Spalte → Backend-Sortier-Werte. Klick auf einen Spaltenkopf togglet
   // asc/desc; erste Sortierung pro Spalte nimmt die sinnvolle Default-Richtung.
+  // Manuell recherchierte Logos fuer bekannte Server-Communities (Top-Server nach Pop).
+  // Kein Auto-Fetch moeglich: weder Steam Web API noch BattleMetrics liefern ein Logo-Feld.
+  const BRAND_LOGOS = [
+    { match: "atlas",      logo: "/logos/atlas.png" },
+    { match: "rustreborn", logo: "/logos/rustreborn.png" },
+    { match: "survivors.gg", logo: "/logos/survivors.png" },
+    { match: "warbandits", logo: "/logos/warbandits.svg" },
+    { match: "rustoria",   logo: "/logos/rustoria.png" },
+    { match: "rustafied",  logo: "/logos/rustafied.png" },
+    { match: "thisisrust", logo: "/logos/thisisrust.png" },
+    { match: "rustburg",   logo: "/logos/rustburg.png" },
+  ];
+  function brandLogoFor(name) {
+    const n = (name || "").toLowerCase();
+    const hit = BRAND_LOGOS.find(b => n.includes(b.match));
+    return hit ? hit.logo : null;
+  }
+
   const SORT_COLS = {
     name: { asc: "name",    desc: "name_desc", first: "asc"  },
     pop:  { asc: "pop_asc", desc: "pop_desc",  first: "desc" },
     map:  { asc: "map",     desc: "map_desc",  first: "asc"  },
-    ping: { asc: "ping",    desc: "ping_desc", first: "asc"  },
     wipe: { asc: "wipe",    desc: "wipe_desc", first: "asc"  },
   };
 
@@ -1043,7 +1097,6 @@
         <div class="sortable" data-sort="name" title="Sort by name">Server${sortIndicator("name")}</div>
         <div class="sortable" data-sort="pop" style="text-align:right;" title="Sort by population">Pop${sortIndicator("pop")}</div>
         <div class="sortable" data-sort="map" title="Sort by map">Map${sortIndicator("map")}</div>
-        <div class="sortable" data-sort="ping" style="text-align:right;" title="Sort by ping">Ping${sortIndicator("ping")}</div>
         <div class="sortable" data-sort="wipe" title="Sort by next wipe">Wipe${sortIndicator("wipe")}</div>
         <div style="text-align:right;">Action</div>
       </div>`;
@@ -1084,12 +1137,12 @@
       return `
         <div class="browse-row ${s.in_watchlist ? "is-watched" : ""}">
           <div class="brow-name">
+            ${brandLogoFor(s.name) ? `<img class="brow-logo" src="${brandLogoFor(s.name)}" alt="" loading="lazy" />` : ""}
             <a class="brow-link" href="/server/${fmt.escape(encodeURIComponent(s.host))}:${Number(s.port)}"><strong>${fmt.escape(s.name)}</strong></a>
             <div class="brow-tags">${tags.join("")}</div>
           </div>
           <div class="brow-pop">${s.players_count}<span class="max">/${s.max_players}</span>${queueStr}</div>
           <div class="brow-map">${fmt.escape(s.map || "—")}</div>
-          <div class="brow-ping">${s.ping_ms ?? "—"}<span style="font-size:10px; color:var(--text-dim);">ms</span></div>
           <div class="brow-wipe">${wipeStr}</div>
           <div class="brow-actions">${btn}</div>
         </div>`;
@@ -1225,6 +1278,15 @@
     ta.remove();
     return ok;
   }
+  function toggleCalVisibility(input, btn) {
+    if (!input || !btn) return;
+    const hidden = input.type === "password";
+    input.type = hidden ? "text" : "password";
+    btn.textContent = hidden ? "Hide" : "Show";
+  }
+  els.btnCalShow?.addEventListener("click", () => toggleCalVisibility(els.calWebcalUrl, els.btnCalShow));
+  els.btnCalShowHttps?.addEventListener("click", () => toggleCalVisibility(els.calHttpsUrl, els.btnCalShowHttps));
+
   els.btnCalCopy?.addEventListener("click", async () => {
     const url = els.calWebcalUrl?.value || "";
     if (!url) return;

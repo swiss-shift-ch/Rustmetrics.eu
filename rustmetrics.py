@@ -389,19 +389,13 @@ def _bm_search_id(host: str, port: int) -> int | None:
     BM-Search behandelt ':' im search-Term als Text-Token und matcht im Namen.
     Suchen daher nur per IP, dann clientseitig auf Port filtern.
     """
-    if not bm_available():
-        return None
-    try:
-        url = (BATTLEMETRICS_URL + "?" + urllib.parse.urlencode({
-            "filter[game]":    "rust",
-            "filter[search]":  host,
-            "page[size]":      "25",
-        }))
-        payload = bm_get(url, timeout=8)
-        return pick_bm_server_id(payload.get("data") or [], host, port)
-    except Exception as e:
-        print(f"[bm_search] {host}:{port}: {e}", file=sys.stderr, flush=True)
-    return None
+    url = (BATTLEMETRICS_URL + "?" + urllib.parse.urlencode({
+        "filter[game]":    "rust",
+        "filter[search]":  host,
+        "page[size]":      "25",
+    }))
+    payload = bm_get(url, timeout=8)
+    return pick_bm_server_id(payload.get("data") or [], host, port)
 
 def get_bm_id(host: str, port: int) -> int | None:
     """Cached BM-ID-Lookup für Host:Port."""
@@ -410,7 +404,14 @@ def get_bm_id(host: str, port: int) -> int | None:
         e = _bm_id_cache.get(key)
         if e and (time.time() - e["ts"]) < BM_ID_CACHE_TTL:
             return e["id"]
-    bm_id = _bm_search_id(host, port)
+    if not bm_available():
+        return None
+    try:
+        bm_id = _bm_search_id(host, port)
+    except Exception as e:
+        # Fehler (z.B. 429 nach einem Neustart) nicht cachen, sonst fehlt der Server 24h
+        print(f"[bm_search] {host}:{port}: {e}", file=sys.stderr, flush=True)
+        return None
     with _bm_id_lock:
         _bm_id_cache[key] = {"ts": time.time(), "id": bm_id}
     return bm_id

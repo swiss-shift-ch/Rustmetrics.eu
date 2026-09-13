@@ -1605,6 +1605,10 @@
       return VALID_TABS.includes(saved) ? saved : null;
     } catch (e) { return null; }
   }
-  const initialTab = PATH_TABS[location.pathname] || savedTab();
+  function queryTab() {
+    const tab = new URLSearchParams(location.search).get("tab");
+    return VALID_TABS.includes(tab) ? tab : null;
+  }
+  const initialTab = PATH_TABS[location.pathname] || queryTab() || savedTab();
   if (initialTab) switchTab(initialTab, "replace");
 })();

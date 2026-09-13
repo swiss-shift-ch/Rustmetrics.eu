@@ -82,6 +82,19 @@
      token (no tracking, no content). The cookie is <code>HttpOnly</code>, <code>Secure</code> and
      <code>SameSite=Lax</code>. Lifetime: 30 days by default or until logout. Legal basis: performance
      of the use agreement (Art. 6(1)(b) GDPR / Art. 31 revFADP); without the cookie no login is possible.</p>
+  <p>When you sign in, we store the <strong>IP address and browser user agent</strong> together with the
+     session in our database, so that misuse of sessions can be detected. This data is deleted together with
+     the session when it expires (max. 30 days) or when you log out. Legal basis: legitimate interest in
+     secure operation (Art. 6(1)(f) GDPR / Art. 31 revFADP).</p>
+
+  <h3>2.6 Public data from Rust servers</h3>
+  <p>To show server and player activity, RustMetrics queries the public player lists of Rust servers
+     (Steam server query protocol) and the public BattleMetrics API. From this we store per player:
+     in-game name, previous names, BattleMetrics player ID, the SteamID64 where it is publicly provided,
+     and when the player was first and last seen. This data is already public, is not linked to
+     RustMetrics accounts and is used for public server and player pages. Legal basis: legitimate interest
+     (Art. 6(1)(f) GDPR / Art. 31 revFADP). You can object and request deletion of your player record at any
+     time via <a href="mailto:info@swiss-shift.ch">info@swiss-shift.ch</a>.</p>
 
   <h2>3. Where data is processed</h2>
   <p>The application runs on a server provided by <strong>Hetzner Online GmbH</strong>
@@ -96,8 +109,10 @@
   <dl>
     <dt>User account (SteamID, name, avatar):</dt>
     <dd>until deletion by the user.</dd>
-    <dt>Sessions:</dt>
+    <dt>Sessions, including IP address and user agent:</dt>
     <dd>30 days after last login, or until logout.</dd>
+    <dt>Public player records (name, previous names, IDs, first/last seen):</dt>
+    <dd>indefinitely; deletion on request.</dd>
     <dt>Server snapshots (pop, map, player list):</dt>
     <dd>rolling 14 days.</dd>
     <dt>Player session diffs (who was on which server, when):</dt>

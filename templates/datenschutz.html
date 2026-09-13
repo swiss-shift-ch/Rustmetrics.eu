@@ -100,6 +100,23 @@
      <code>SameSite=Lax</code>. Lebensdauer: standardmässig 30 Tage oder bis Logout.
      Rechtsgrundlage: Erfüllung des Nutzungsverhältnisses (Art. 6 Abs. 1 lit. b DSGVO
      bzw. Art. 31 revDSG); ohne den Cookie ist kein Login möglich.</p>
+  <p>Beim Login speichern wir zusammen mit der Session die <strong>IP-Adresse und den
+     User-Agent Ihres Browsers</strong> in unserer Datenbank, um Missbrauch von Sessions
+     erkennen zu können. Diese Daten werden mit der Session gelöscht, wenn sie abläuft
+     (max. 30 Tage) oder Sie sich ausloggen. Rechtsgrundlage: berechtigtes Interesse am
+     sicheren Betrieb (Art. 6 Abs. 1 lit. f DSGVO bzw. Art. 31 revDSG).</p>
+
+  <h3>2.6 Öffentliche Daten von Rust-Servern</h3>
+  <p>Um Server- und Spieleraktivität anzuzeigen, fragt RustMetrics die öffentlichen
+     Spielerlisten von Rust-Servern (Steam-Server-Query-Protokoll) und die öffentliche
+     BattleMetrics-API ab. Daraus speichern wir pro Spieler: Ingame-Name, frühere Namen,
+     BattleMetrics-Spieler-ID, die SteamID64, sofern sie öffentlich bereitgestellt wird,
+     sowie Zeitpunkt des ersten und letzten Sichtens. Diese Daten sind bereits öffentlich,
+     werden nicht mit RustMetrics-Accounts verknüpft und dienen den öffentlichen Server-
+     und Spielerseiten. Rechtsgrundlage: berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO
+     bzw. Art. 31 revDSG). Sie können jederzeit widersprechen und die Löschung Ihres
+     Spielereintrags per <a href="mailto:info@swiss-shift.ch">info@swiss-shift.ch</a>
+     verlangen.</p>
 
   <h2>3. Wo werden die Daten verarbeitet</h2>
   <p>Die Anwendung läuft auf einem Server der <strong>Hetzner Online GmbH</strong>
@@ -117,8 +134,10 @@
   <dl>
     <dt>User-Account (SteamID, Name, Avatar):</dt>
     <dd>bis zur Löschung durch den Nutzer.</dd>
-    <dt>Sessions:</dt>
+    <dt>Sessions inkl. IP-Adresse und User-Agent:</dt>
     <dd>30 Tage nach letztem Login oder bis Logout.</dd>
+    <dt>Öffentliche Spielereinträge (Name, frühere Namen, IDs, erstes/letztes Sichten):</dt>
+    <dd>unbefristet; Löschung auf Anfrage.</dd>
     <dt>Server-Snapshots (Pop, Map, Spielerliste):</dt>
     <dd>14 Tage rollierend.</dd>
     <dt>Player-Session-Diffs (wer war wann auf welchem Server):</dt>

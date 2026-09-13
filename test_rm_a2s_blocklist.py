@@ -7,13 +7,17 @@ import unittest
 
 from rm_a2s import query_a2s
 from rm_a2s_blocklist import (MODE_ANON, MODE_FULL, MODE_PLAYERS, A2SBlocklist,
-                              bm_names_confirmed_real, should_use_bm_names)
+                              looks_randomized, names_look_real, should_use_bm_names)
 from rm_config import A2S_HEADER, A2S_INFO_REQUEST, A2S_PLAYER_REQHDR
 
 HOST, PORT = "203.0.113.9", 28015
-FAKE_NAMES = ["carmelo", "gena", "otis"] * 6
+POOL = ["carmelo", "gena", "otis", "bruno", "lina", "marek", "ida", "tomas", "vera", "hugo",
+        "nils", "petra", "ronja"]
+FAKE_NAMES_BIG = ["carmelo", "gena", "otis"] * 6
+FAKE_NAMES_SMALL = POOL
 REAL_NAMES = [f"Player_{i}" for i in range(20)]
-FEW_REAL_NAMES = REAL_NAMES[:5]
+REAL_NAMES_SMALL = [f"Player_{i}" for i in range(12)]
+REAL_LOWERCASE_NAMES = ["john", "mike", "sarah", "tom", "lisa", "paul"]
 
 _INFO_PACKET = (
     b"\xFF\xFF\xFF\xFFI" + bytes([17])
@@ -44,12 +48,13 @@ class A2SBlocklistTest(unittest.TestCase):
         self.assertEqual(_record(A2SBlocklist(), a2s_names=[], bm_names=REAL_NAMES), MODE_PLAYERS)
         self.assertIsNone(_record(A2SBlocklist(), a2s_names=[], bm_names=[]))
 
-    def test_marks_anonymized_when_battlemetrics_has_real_names(self):
-        self.assertEqual(_record(A2SBlocklist(), a2s_names=FAKE_NAMES, bm_names=REAL_NAMES), MODE_ANON)
+    def test_marks_anonymized_for_big_and_small_servers_when_battlemetrics_has_real_names(self):
+        self.assertEqual(_record(A2SBlocklist(), a2s_names=FAKE_NAMES_BIG, bm_names=REAL_NAMES), MODE_ANON)
+        self.assertEqual(_record(A2SBlocklist(), a2s_names=FAKE_NAMES_SMALL, bm_names=REAL_NAMES_SMALL), MODE_ANON)
 
-    def test_not_anonymized_mode_when_battlemetrics_also_has_fake_or_too_few_names(self):
-        self.assertIsNone(_record(A2SBlocklist(), a2s_names=FAKE_NAMES, bm_names=FAKE_NAMES))
-        self.assertIsNone(_record(A2SBlocklist(), a2s_names=FAKE_NAMES, bm_names=FEW_REAL_NAMES))
+    def test_no_anonymized_mode_when_battlemetrics_has_same_fake_names(self):
+        self.assertIsNone(_record(A2SBlocklist(), a2s_names=FAKE_NAMES_BIG, bm_names=FAKE_NAMES_BIG))
+        self.assertIsNone(_record(A2SBlocklist(), a2s_names=FAKE_NAMES_SMALL, bm_names=FAKE_NAMES_SMALL))
 
     def test_clears_entry_when_a2s_works_again(self):
         blocklist = A2SBlocklist()
@@ -66,21 +71,28 @@ class A2SBlocklistTest(unittest.TestCase):
 
 class NameSourceTest(unittest.TestCase):
     def test_uses_battlemetrics_names_when_a2s_has_none(self):
-        self.assertTrue(should_use_bm_names([], FEW_REAL_NAMES))
+        self.assertTrue(should_use_bm_names([], REAL_NAMES_SMALL[:3]))
 
-    def test_replaces_fake_a2s_names_only_with_confirmed_real_battlemetrics_names(self):
-        self.assertTrue(should_use_bm_names(FAKE_NAMES, REAL_NAMES))
-        self.assertFalse(should_use_bm_names(FAKE_NAMES, FAKE_NAMES))
-        self.assertFalse(should_use_bm_names(FAKE_NAMES, FEW_REAL_NAMES))
+    def test_replaces_fake_a2s_names_with_different_real_battlemetrics_names(self):
+        self.assertTrue(should_use_bm_names(FAKE_NAMES_BIG, REAL_NAMES))
+        self.assertTrue(should_use_bm_names(FAKE_NAMES_SMALL, REAL_NAMES_SMALL))
 
-    def test_keeps_real_a2s_names_and_ignores_empty_battlemetrics(self):
+    def test_never_replaces_when_both_sources_report_the_same_names(self):
+        self.assertFalse(should_use_bm_names(FAKE_NAMES_SMALL, FAKE_NAMES_SMALL))
         self.assertFalse(should_use_bm_names(REAL_NAMES, REAL_NAMES))
+        self.assertFalse(should_use_bm_names(REAL_LOWERCASE_NAMES, REAL_LOWERCASE_NAMES))
+
+    def test_needs_enough_battlemetrics_names_to_judge(self):
+        self.assertFalse(should_use_bm_names(FAKE_NAMES_SMALL, REAL_NAMES_SMALL[:3]))
         self.assertFalse(should_use_bm_names([], []))
 
-    def test_confirmed_real_needs_enough_names(self):
-        self.assertTrue(bm_names_confirmed_real(REAL_NAMES))
-        self.assertFalse(bm_names_confirmed_real(FEW_REAL_NAMES))
-        self.assertFalse(bm_names_confirmed_real(FAKE_NAMES))
+    def test_looks_randomized_and_names_look_real(self):
+        self.assertTrue(looks_randomized(FAKE_NAMES_SMALL))
+        self.assertFalse(looks_randomized(REAL_NAMES_SMALL))
+        self.assertFalse(looks_randomized(["gena", "otis"]))
+        self.assertTrue(names_look_real(REAL_NAMES_SMALL))
+        self.assertFalse(names_look_real(FAKE_NAMES_SMALL))
+        self.assertFalse(names_look_real(REAL_NAMES_SMALL[:3]))
 
 
 class _FakeA2SServer:

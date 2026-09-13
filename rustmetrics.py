@@ -52,7 +52,7 @@ from rm_config import (  # noqa: F401
 )
 from rm_a2s import query_a2s  # noqa: F401
 from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist,
-                              bm_names_confirmed_real, should_use_bm_names)
+                              looks_randomized, names_look_real, should_use_bm_names)
 from rm_rust import (  # noqa: F401
     parse_rust_keywords, detect_rust_tier, detect_rust_category,
     detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
@@ -1318,7 +1318,7 @@ def poll_server_row(row: dict) -> dict:
     bm_attrs = None
     bm_pairs: list[tuple[int, str]] = []
     used_bm_names = False
-    if not a2s_has_pop or not a2s_has_players or detect_name_anonymization(a2s_names):
+    if not a2s_has_pop or not a2s_has_players or looks_randomized(a2s_names):
         try:
             bm_attrs, bm_pairs = query_bm_server(row["host"], row["port"])
         except Exception as e:
@@ -1400,7 +1400,7 @@ def poll_server_row(row: dict) -> dict:
                 cur.execute(
                     "UPDATE servers SET is_anonymized=TRUE WHERE id=%s AND NOT is_anonymized",
                     (row["id"],))
-            elif used_bm_names and bm_names_confirmed_real(names):
+            elif used_bm_names and names_look_real(names):
                 cur.execute(
                     "UPDATE servers SET is_anonymized=FALSE WHERE id=%s AND is_anonymized",
                     (row["id"],))

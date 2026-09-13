@@ -3,7 +3,7 @@
 import threading
 import time
 
-from rm_rust import ANON_DETECTION_MIN_NAMES, detect_name_anonymization
+from rm_rust import detect_name_anonymization, is_pool_style_name
 
 RECHECK_AFTER_SEC = 6 * 3600
 MODE_FULL = "full"
@@ -11,10 +11,30 @@ MODE_PLAYERS = "players"
 MODE_ANON = "anonymized"
 PLAYER_LIST_FROM_BM_MODES = (MODE_PLAYERS, MODE_ANON)
 
+MIN_COMPARE_NAMES = 5
+POOL_NAME_RATIO = 0.70
+MAX_SHARED_NAME_RATIO = 0.10
 
-def bm_names_confirmed_real(bm_names: list[str]) -> bool:
-    """Enough names for the heuristic to judge, and they don't look randomized."""
-    return len(bm_names) >= ANON_DETECTION_MIN_NAMES and not detect_name_anonymization(bm_names)
+
+def looks_randomized(names: list[str]) -> bool:
+    """Full heuristic for big lists; for small lists a high share of pool-style names is enough suspicion."""
+    if detect_name_anonymization(names):
+        return True
+    if len(names) < MIN_COMPARE_NAMES:
+        return False
+    return sum(1 for n in names if is_pool_style_name(n)) / len(names) >= POOL_NAME_RATIO
+
+
+def names_look_real(names: list[str]) -> bool:
+    return len(names) >= MIN_COMPARE_NAMES and not looks_randomized(names)
+
+
+def bm_names_replace_randomized(a2s_names: list[str], bm_names: list[str]) -> bool:
+    """A2S names look randomized while BattleMetrics has different, real-looking names (RCON-connected server)."""
+    if not looks_randomized(a2s_names) or not names_look_real(bm_names):
+        return False
+    shared = len({n.lower() for n in a2s_names} & {n.lower() for n in bm_names})
+    return shared <= MAX_SHARED_NAME_RATIO * min(len(a2s_names), len(bm_names))
 
 
 def should_use_bm_names(a2s_names: list[str], bm_names: list[str]) -> bool:
@@ -22,7 +42,7 @@ def should_use_bm_names(a2s_names: list[str], bm_names: list[str]) -> bool:
         return False
     if not a2s_names:
         return True
-    return detect_name_anonymization(a2s_names) and bm_names_confirmed_real(bm_names)
+    return bm_names_replace_randomized(a2s_names, bm_names)
 
 
 def classify_a2s_block(a2s_online: bool, a2s_names: list[str], a2s_players_failed: bool,
@@ -32,7 +52,7 @@ def classify_a2s_block(a2s_online: bool, a2s_names: list[str], a2s_players_faile
         return MODE_FULL if bm_online else None
     if (a2s_players_failed or not a2s_names) and bm_names:
         return MODE_PLAYERS
-    if detect_name_anonymization(a2s_names) and bm_names_confirmed_real(bm_names):
+    if bm_names_replace_randomized(a2s_names, bm_names):
         return MODE_ANON
     return None
 

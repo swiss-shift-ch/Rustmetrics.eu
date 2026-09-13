@@ -213,6 +213,11 @@ def detect_rust_group_limit(name, tags) -> int | None:
 ANON_DETECTION_MIN_NAMES = 15
 
 
+def is_pool_style_name(name: str) -> bool:
+    """Looks like an entry from Facepunch's randomized pool: short, lowercase, letters only."""
+    return 3 <= len(name) <= 12 and name.islower() and name.isalpha()
+
+
 def detect_name_anonymization(player_names: list[str]) -> bool:
     """
     Erkennt Facepunch-style Name-Randomisierung. Heuristik fingerprintet:
@@ -233,7 +238,7 @@ def detect_name_anonymization(player_names: list[str]) -> bool:
         if key in seen: dupes += 1
         else: seen.add(key)
         # "Pure lowercase short alpha" = look like Facepunch's randomized pool entries
-        if 3 <= len(n) <= 12 and n.islower() and n.isalpha():
+        if is_pool_style_name(n):
             lower_alpha += 1
     lower_ratio = lower_alpha / len(real_names)
     # Strenger Filter: ≥3 Duplikate UND ≥70% pure-lowercase-alpha-short

@@ -50,19 +50,19 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260819a" />
+<link rel="stylesheet" href="/style.css?v=20260913a" />
 </head>
 <body>
 
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark" aria-hidden="true"></span>
-    <span class="brand-name">RUST<span class="brand-name-accent">METRICS</span></span>
+    <h1 class="brand-name">RUST<span class="brand-name-accent">METRICS</span></h1>
   </div>
 
-  <div class="topbar-stats">
-    <span class="stat"><span class="stat-num" id="stat-servers">0</span><span class="stat-label">Servers</span></span>
-    <span class="stat"><span class="stat-num" id="stat-watched">0</span><span class="stat-label">Players</span></span>
+  <div class="topbar-stats" id="topbar-stats" title="Your watchlist" hidden>
+    <span class="stat"><span class="stat-num" id="stat-servers">0</span><span class="stat-label">Watched</span></span>
+    <span class="stat"><span class="stat-num" id="stat-watched">0</span><span class="stat-label">Tracked</span></span>
     <span class="stat"><span class="stat-num green" id="stat-online">0</span><span class="stat-label">Online</span></span>
   </div>
 
@@ -78,30 +78,30 @@
 <div class="app">
 
   <nav class="sidebar">
-    <button class="nav-item is-active" data-tab="watchlist">
+    <button class="nav-item is-active" data-tab="watchlist" aria-label="Watchlist">
       <span class="nav-icon" aria-hidden="true">▦</span>
       <span class="nav-label">Watchlist</span>
     </button>
-    <button class="nav-item" data-tab="browse">
+    <button class="nav-item" data-tab="browse" aria-label="Server browser">
       <span class="nav-icon" aria-hidden="true">⌖</span>
       <span class="nav-label">Browser</span>
     </button>
-    <button class="nav-item" data-tab="mystats">
+    <button class="nav-item" data-tab="mystats" aria-label="My stats">
       <span class="nav-icon" aria-hidden="true">◆</span>
       <span class="nav-label">My Stats</span>
     </button>
-    <button class="nav-item" data-tab="play" title="Mini-game — Rust Flap">
+    <button class="nav-item" data-tab="play" title="Mini-game — Rust Flap" aria-label="Play Rust Flap">
       <span class="nav-icon" aria-hidden="true">▶</span>
       <span class="nav-label">Play</span>
     </button>
-    <button class="nav-item" data-tab="settings">
+    <button class="nav-item" data-tab="settings" aria-label="Settings">
       <span class="nav-icon" aria-hidden="true">⚙</span>
       <span class="nav-label">Settings</span>
     </button>
 
     <div class="nav-spacer"></div>
 
-    <button class="nav-item nav-item-mini" data-tab="about">
+    <button class="nav-item nav-item-mini" data-tab="about" aria-label="About">
       <span class="nav-icon" aria-hidden="true">?</span>
       <span class="nav-label">About</span>
     </button>
@@ -111,7 +111,7 @@
 
     <section class="view view-watchlist is-active" data-view="watchlist">
       <header class="view-header">
-        <h1 class="view-title">My Watchlist</h1>
+        <h2 class="view-title">My Watchlist</h2>
         <p class="view-sub">Servers you're watching — with player sub-list and online status.</p>
       </header>
 
@@ -132,8 +132,8 @@
       <div id="auth-only">
         <section class="add-server-section">
           <form id="add-server-form" class="add-form">
-            <input type="text"   id="srv-host" placeholder="IP or hostname  (e.g. 192.168.1.1)" required />
-            <input type="number" id="srv-port" placeholder="Query port (28015)" min="1" max="65535" required />
+            <input type="text"   id="srv-host" aria-label="Server IP or hostname"placeholder="IP or hostname  (e.g. 192.168.1.1)" required />
+            <input type="number" id="srv-port" aria-label="Query port"placeholder="Query port (28015)" min="1" max="65535" required />
             <button type="submit" class="btn-primary">+ Server</button>
           </form>
           <p class="hint">
@@ -145,7 +145,7 @@
           <div class="friends-head">
             <strong>Friends playing Rust now</strong>
             <span id="friends-count" class="friends-count"></span>
-            <button type="button" id="friends-refresh" class="btn-ghost" title="Refresh">⟳</button>
+            <button type="button" id="friends-refresh" class="btn-ghost" title="Refresh" aria-label="Refresh friends">⟳</button>
           </div>
           <div id="friends-list" class="friends-list"></div>
         </section>
@@ -162,13 +162,13 @@
 
     <section class="view view-browse" data-view="browse" hidden>
       <header class="view-header">
-        <h1 class="view-title">Server Browser</h1>
+        <h2 class="view-title">Server Browser</h2>
         <p class="view-sub" id="browse-status">Live Rust servers.</p>
       </header>
 
       <form id="browse-filter" class="browse-filter">
-        <input type="search" id="bf-q" placeholder="Search server names …" />
-        <select id="bf-region" title="Region (official Rust region tag)">
+        <input type="search" id="bf-q" placeholder="Search server names …" aria-label="Search server names" />
+        <select id="bf-region" title="Region (official Rust region tag)" aria-label="Region">
           <option value="all" selected>All regions</option>
           <option value="eu">Europe (EU)</option>
           <option value="na">North America (NA)</option>
@@ -179,14 +179,14 @@
           <option value="oc">Oceania (OC)</option>
           <option value="af">Africa (AF)</option>
         </select>
-        <select id="bf-tier" title="Category">
+        <select id="bf-tier" title="Category" aria-label="Category">
           <option value="all">All</option>
           <option value="vanilla">Vanilla</option>
           <option value="community">Community</option>
           <option value="modded">Modded</option>
           <option value="pve">PvE</option>
         </select>
-        <select id="bf-group" title="Max group size (solo/duo/trio…) — detected from server name/tags">
+        <select id="bf-group" title="Max group size (solo/duo/trio…) — detected from server name/tags" aria-label="Max group size">
           <option value="all" selected>Any group</option>
           <option value="1">Solo</option>
           <option value="2">Duo (max 2)</option>
@@ -195,13 +195,13 @@
           <option value="5plus">Max 5+</option>
           <option value="nolimit">No limit</option>
         </select>
-        <select id="bf-wiped" title="Wipe freshness">
+        <select id="bf-wiped" title="Wipe freshness" aria-label="Wipe freshness">
           <option value="0" selected>Any wipe</option>
           <option value="24">Wiped &lt; 24h</option>
           <option value="48">Wiped &lt; 48h</option>
           <option value="168">Wiped &lt; 7d</option>
         </select>
-        <select id="bf-sort" title="Sort">
+        <select id="bf-sort" title="Sort" aria-label="Sort order">
           <option value="pop_desc">Pop ↓</option>
           <option value="pop_asc">Pop ↑</option>
           <option value="name">Name A–Z</option>
@@ -218,7 +218,7 @@
           Min pop
           <input type="number" id="bf-min-pop" min="0" max="500" value="0" />
         </label>
-        <button type="button" id="bf-refresh" class="btn-ghost" title="Bypass cache, fetch fresh">⟳</button>
+        <button type="button" id="bf-refresh" class="btn-ghost" title="Bypass cache, fetch fresh" aria-label="Refresh server list">⟳</button>
       </form>
 
       <div id="browse-loading" class="browse-loading" hidden>
@@ -232,7 +232,7 @@
     <!-- ── Play View — Rust Flap Mini-Game while-you-wait-for-offline-raid ── -->
     <section class="view view-play" data-view="play" hidden>
       <header class="view-header">
-        <h1 class="view-title">Rust Flap</h1>
+        <h2 class="view-title">Rust Flap</h2>
         <p class="view-sub">While you wait for the offline-raid window — flap through wooden spike walls.
            Click / Space / Tap to flap. Sign in with Steam to submit your score to the leaderboard.</p>
       </header>
@@ -275,7 +275,7 @@
     <!-- ── My Stats View — eingeloggter User sieht eigene Rust-Lifetime-Stats ── -->
     <section class="view view-mystats" data-view="mystats" hidden>
       <header class="view-header">
-        <h1 class="view-title">My Rust Stats</h1>
+        <h2 class="view-title">My Rust Stats</h2>
         <p class="view-sub">Lifetime in-game counters pulled live from Steam. Requires <em>Game details: Public</em> in your Steam privacy settings.</p>
       </header>
 
@@ -306,7 +306,7 @@
     <!-- ── Settings View ── -->
     <section class="view view-settings" data-view="settings" hidden>
       <header class="view-header">
-        <h1 class="view-title">Settings</h1>
+        <h2 class="view-title">Settings</h2>
         <p class="view-sub">Notification preferences. Per-account, sync across all your sessions.</p>
       </header>
 
@@ -326,7 +326,7 @@
           <p class="settings-hint">Pipe player-online/-offline events to a Discord channel.
              Create a webhook in <strong>Server Settings → Integrations → Webhooks → New Webhook</strong>,
              then paste the URL here. Per-account, never shared.</p>
-          <input type="url" id="set-discord-webhook"
+          <input type="url" id="set-discord-webhook" aria-label="Discord webhook URL"
                  placeholder="https://discord.com/api/webhooks/…"
                  pattern="https://(?:ptb\.|canary\.)?(?:discord|discordapp)\.com/api/webhooks/.+" />
           <div class="settings-row">
@@ -349,13 +349,13 @@
           <div class="settings-row" style="flex-direction:column; align-items:stretch; gap:8px;">
             <label class="check" style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">Subscribe URL (one-tap in Apple/Google Calendar)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="cal-webcal-url" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" placeholder="loading…" />
+              <input type="text" id="cal-webcal-url" aria-label="Calendar subscribe URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" placeholder="loading…" />
               <button type="button" id="btn-cal-copy" class="btn-ghost" title="Copy URL to clipboard">Copy</button>
               <a id="cal-webcal-open" href="#" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">Open in Calendar</a>
             </div>
             <label class="check" style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-top:6px;">Or HTTPS URL (for Outlook / web-only clients)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="cal-https-url" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" />
+              <input type="text" id="cal-https-url" aria-label="Calendar HTTPS URL" readonly style="flex:1; font-family:'SF Mono',monospace; font-size:12px;" />
               <button type="button" id="btn-cal-copy-https" class="btn-ghost" title="Copy HTTPS URL">Copy</button>
             </div>
           </div>
@@ -369,7 +369,7 @@
 
     <section class="view view-about" data-view="about" hidden>
       <header class="view-header">
-        <h1 class="view-title">About RustMetrics</h1>
+        <h2 class="view-title">About RustMetrics</h2>
       </header>
       <div class="about-card">
         <p><strong>RustMetrics</strong> is a free, focused server and player tracker for Facepunch Rust.
@@ -423,6 +423,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260819b"></script>
+<script src="/app.js?v=20260913a"></script>
 </body>
 </html>

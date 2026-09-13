@@ -39,6 +39,7 @@
     statServers:    $("#stat-servers"),
     statWatched:    $("#stat-watched"),
     statOnline:     $("#stat-online"),
+    topbarStats:    $("#topbar-stats"),
     pollIndicator:  $("#poll-indicator"),
     btnNotif:       $("#btn-notif"),
     footerTs:       $("#footer-ts"),
@@ -122,7 +123,23 @@
   }
 
   // ─── Tabs ─────────────────────────────────────────────────────────────
-  function switchTab(name) {
+  // Nur der Server-Browser hat eine eigene URL (/browser, serverseitig vorgerendert).
+  const HOME_TITLE = "RustMetrics — Rust Server & Player Tracker";
+  const TAB_PATHS  = { browse: "/browser" };
+  const TAB_TITLES = { browse: "Rust Server Browser — Live Pop, Wipes & Filters | RustMetrics" };
+  const PATH_TABS  = { "/browser": "browse", "/browser/": "browse" };
+  const VALID_TABS = ["browse", "watchlist", "about", "settings", "mystats", "play"];
+
+  function syncUrl(name, historyMode) {
+    document.title = TAB_TITLES[name] || HOME_TITLE;
+    if (historyMode === "none") return;
+    const path = TAB_PATHS[name] || "/";
+    if (location.pathname === path) return;
+    const method = historyMode === "replace" ? "replaceState" : "pushState";
+    try { history[method]({ tab: name }, "", path); } catch (e) {}
+  }
+
+  function switchTab(name, historyMode = "push") {
     if (!name) return;
     currentTab = name;
     els.navItems.forEach(t => t.classList.toggle("is-active", t.dataset.tab === name));
@@ -141,6 +158,7 @@
     if (name === "play") {
       loadPlayLeaderboard();
     }
+    syncUrl(name, historyMode);
     try { localStorage.setItem(LS_PREFIX + "tab", name); } catch (e) {}
   }
   els.navItems.forEach(t => {
@@ -149,6 +167,9 @@
   document.addEventListener("click", (e) => {
     const goto = e.target.closest?.("[data-go-tab]");
     if (goto) { e.preventDefault(); switchTab(goto.dataset.goTab); }
+  });
+  window.addEventListener("popstate", (e) => {
+    switchTab(e.state?.tab || PATH_TABS[location.pathname] || "watchlist", "none");
   });
 
   // ─── Auth / User ──────────────────────────────────────────────────────
@@ -181,7 +202,7 @@
       els.userSlot.innerHTML = `
         <a class="btn-steam" href="/auth/steam/login">
           <span class="steam-icon" aria-hidden="true">⌬</span>
-          Sign in with Steam
+          <span>Sign in<span class="btn-steam-long"> with Steam</span></span>
         </a>
       `;
     }
@@ -191,6 +212,7 @@
     if (isAuthed()) {
       els.guestCta.hidden = true;
       els.authOnly.hidden = false;
+      els.topbarStats.hidden = false;
       els.settingsGuest && (els.settingsGuest.hidden = true);
       els.settingsForm  && (els.settingsForm.hidden  = false);
       // Settings-Felder mit /api/me-Werten bestücken
@@ -212,9 +234,7 @@
       els.settingsForm  && (els.settingsForm.hidden  = true);
       els.servers.innerHTML = "";
       els.serversEmpty.hidden = true;
-      els.statServers.textContent = "0";
-      els.statWatched.textContent = "0";
-      els.statOnline.textContent  = "0";
+      els.topbarStats.hidden = true;
     }
     renderUserSlot();
   }
@@ -487,7 +507,7 @@
   // Nutzt die Steam-Freundesliste + Presence. Braucht eine oeffentliche
   // Freundesliste; ist sie privat, blendet sich der Block einfach aus.
   async function loadFriends() {
-    if (!els.friendsSection) return;
+    if (!els.friendsSection || !isAuthed()) return;
     try {
       const d = await api("/api/me/friends");
       if (!d.available || !d.friends.length) {
@@ -1062,7 +1082,7 @@
       return `
         <div class="browse-row ${s.in_watchlist ? "is-watched" : ""}">
           <div class="brow-name">
-            <strong>${fmt.escape(s.name)}</strong>
+            <a class="brow-link" href="/server/${fmt.escape(encodeURIComponent(s.host))}:${Number(s.port)}"><strong>${fmt.escape(s.name)}</strong></a>
             <div class="brow-tags">${tags.join("")}</div>
           </div>
           <div class="brow-pop">${s.players_count}<span class="max">/${s.max_players}</span>${queueStr}</div>
@@ -1515,8 +1535,12 @@
     setInterval(loadServers, REFRESH_MS);
     setInterval(loadFriends, 60000);   // Presence aendert sich minuetlich
   })();
-  try {
-    const saved = localStorage.getItem(LS_PREFIX + "tab");
-    if (["browse","watchlist","about","settings","mystats","play"].includes(saved)) switchTab(saved);
-  } catch (e) {}
+  function savedTab() {
+    try {
+      const saved = localStorage.getItem(LS_PREFIX + "tab");
+      return VALID_TABS.includes(saved) ? saved : null;
+    } catch (e) { return null; }
+  }
+  const initialTab = PATH_TABS[location.pathname] || savedTab();
+  if (initialTab) switchTab(initialTab, "replace");
 })();

@@ -29,8 +29,8 @@
 
   /* Text */
   --text:           #e8e8e8;
-  --text-muted:     #888888;
-  --text-dim:       #555555;
+  --text-muted:     #a0a0a0;
+  --text-dim:       #8a8a8a;
 
   /* Signal-Farben */
   --green:          #5fc26b;
@@ -77,7 +77,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 30;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 12px; margin-right: auto; }
 .brand-mark {
   /* Rotes Quadrat wie das Rust-Logo */
   width: 28px; height: 28px;
@@ -104,6 +104,9 @@ a:hover { color: var(--accent); text-decoration: underline; }
 }
 .brand-name {
   color: var(--accent);
+  margin: 0;
+  line-height: 1;
+  white-space: nowrap;
 }
 .brand-name-accent {
   color: var(--text);
@@ -111,7 +114,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
   margin-left: 2px;
 }
 
-.topbar-stats { display: flex; gap: 22px; margin-left: auto; }
+.topbar-stats { display: flex; gap: 22px; }
 .stat {
   display: flex; flex-direction: column; align-items: center;
   line-height: 1.1;
@@ -366,7 +369,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
   font-weight: 700;
 }
 .tag.tier-vanilla { color: #c8d8c8; border-color: #355a35; }
-.tag.tier-modded  { color: var(--accent-bright); border-color: var(--accent-deep); background: var(--accent-bg); }
+.tag.tier-modded  { color: #f07058; border-color: var(--accent-deep); background: var(--accent-bg); }
 .tag.tier-pve     { color: #c0b8e0; border-color: #4a3a70; }
 .tag.tier-2x, .tag.tier-3x, .tag.tier-5x,
 .tag.tier-10x, .tag.tier-20x, .tag.tier-50x, .tag.tier-100x {
@@ -759,6 +762,9 @@ a:hover { color: var(--accent); text-decoration: underline; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-weight: 600;
 }
+.brow-link { display: block; min-width: 0; color: inherit; }
+.brow-link:hover { text-decoration: none; }
+.brow-link:hover strong { color: var(--accent-bright); text-decoration: underline; }
 .brow-name .brow-tags {
   display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 3px;
 }
@@ -1438,6 +1444,8 @@ a.player-name.plink:hover {
   .nav-item { padding: 14px 10px 14px 12px; gap: 0; justify-content: center; border-left-width: 3px; }
   .nav-label { display: none; }
   .nav-icon { font-size: 18px; }
+  .topbar-stats { display: none; }
+  .btn-ghost .lbl { display: none; }
   .view { padding: 16px; }
   .server-grid { grid-template-columns: 1fr; }
   .browse-row {
@@ -1455,4 +1463,14 @@ a.player-name.plink:hover {
   .brow-ping, .brow-wipe { display: none; }
   .browse-row.head { display: none; }
   .drawer-panel { width: 100vw; }
+}
+
+@media (max-width: 480px) {
+  .topbar { gap: 8px; padding: 0 10px; }
+  .brand { gap: 8px; }
+  .brand-mark { width: 22px; height: 22px; }
+  .brand-name { font-size: 19px; letter-spacing: 1px; }
+  .btn-steam { padding: 6px 10px; font-size: 11px; letter-spacing: 0.5px; white-space: nowrap; }
+  .btn-steam-long { display: none; }
+  .user-chip-name { max-width: 70px; }
 }

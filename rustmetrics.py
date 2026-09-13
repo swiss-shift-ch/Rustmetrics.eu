@@ -55,6 +55,7 @@ from rm_rust import (  # noqa: F401
     next_wipe_estimate, _REGION_FILTER_ALIASES, _REGION_GROUPS,
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
+from rm_seo import canonical_redirect_location, render_browser_page
 
 
 _bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False}
@@ -483,6 +484,17 @@ def _cache_get(key, ttl=BROWSE_CACHE_TTL):
 def _cache_put(key, data):
     with _browse_lock:
         _browse_cache[key] = {"ts": time.time(), "data": data}
+
+def _cached_browse_servers() -> list[dict]:
+    """Server-Liste aus dem ersten vorhandenen Browse-Cache-Eintrag, unabhaengig vom Alter."""
+    with _browse_lock:
+        entry = (_browse_cache.get("browse:all")
+                 or _browse_cache.get("browse:eu")
+                 or next((v for k, v in _browse_cache.items() if k.startswith("browse:")), None))
+    if not entry:
+        return []
+    raw = entry.get("data", entry)
+    return raw.get("servers") or []
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3453,6 +3465,20 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_browser_page(self):
+        try:
+            with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as f:
+                html = render_browser_page(f.read(), _cached_browse_servers(), ORIGIN)
+        except Exception as e:
+            return self._fail(e, "browser_page")
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=60")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _redirect(self, location: str, status: int = 302,
                   set_cookie: str | None = None,
                   clear_cookie: bool = False):
@@ -3475,6 +3501,10 @@ class Handler(SimpleHTTPRequestHandler):
     # ── Routing ───────────────────────────────────────────────────────
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
+        # www → kanonischer Host: sonst scheitern POSTs am Origin-Check und Linksignale splitten sich
+        location = canonical_redirect_location(self.headers.get("Host"), self.path, ORIGIN)
+        if location:
+            return self._redirect(location, status=301)
         # Rate-Limit (generell, sehr grosszügig)
         if not rate_limit_general(self._client_ip()):
             return self._json({"error": "rate limited"}, 429)
@@ -3632,22 +3662,15 @@ class Handler(SimpleHTTPRequestHandler):
             # Dynamisch: Statische Seiten + Top-100 öffentliche Server aus Browse-Cache
             urls = [
                 (f"{ORIGIN}/",         "daily",   "1.0"),
+                (f"{ORIGIN}/browser",  "hourly",  "0.9"),
                 (f"{ORIGIN}/imprint",  "yearly",  "0.3"),
                 (f"{ORIGIN}/privacy",  "yearly",  "0.3"),
             ]
-            # Top-Server aus dem ersten gefundenen Browse-Cache (Region-Keys "all", "eu", ...)
-            with _browse_lock:
-                cache_entry = (_browse_cache.get("browse:all")
-                               or _browse_cache.get("browse:eu")
-                               or next((v for k,v in _browse_cache.items() if k.startswith("browse:")), None))
-            if cache_entry:
-                # _browse_cache stores raw dict (mit 'servers' key); kein zusätzliches 'data'-wrapping
-                raw = cache_entry.get("data", cache_entry)
-                servers = (raw.get("servers") or [])[:100]
-                for s in servers:
-                    host = s.get("host"); port = s.get("port")
-                    if host and port:
-                        urls.append((f"{ORIGIN}/server/{host}:{port}", "hourly", "0.6"))
+            # Top-Server aus dem Browse-Cache
+            for s in _cached_browse_servers()[:100]:
+                host = s.get("host"); port = s.get("port")
+                if host and port:
+                    urls.append((f"{ORIGIN}/server/{host}:{port}", "hourly", "0.6"))
             # Top-Players nach letzter Aktivität (max 200) — bringt Long-Tail Traffic
             try:
                 with _Conn() as (_c, _cur):
@@ -3674,6 +3697,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+
+        if u.path in ("/browser", "/browser/"):
+            return self._send_browser_page()
 
         # Public server detail page  /server/<host>:<port>
         if u.path.startswith("/server/"):

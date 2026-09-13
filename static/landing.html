@@ -137,6 +137,17 @@
   .btn-primary:hover::after{transform:translateX(2px);}
   .btn-ghost{background:transparent; border-color:var(--border-strong); color:var(--text);}
   .btn-ghost:hover{border-color:var(--accent); color:var(--accent-bright);}
+  .btn-steam{
+    display:inline-flex; align-items:center; gap:9px;
+    padding:11px 20px;
+    font-family:"Oswald",sans-serif; font-weight:500; font-size:13px;
+    letter-spacing:.6px; text-transform:none;
+    border-radius:3px; text-decoration:none; cursor:pointer;
+    background:#171a21; border:1px solid #2a3f5a; color:#c7d5e0;
+    transition:background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .btn-steam:hover{background:#1b2838; border-color:#66c0f4; color:#fff;}
+  .btn-steam svg{color:#66c0f4;}
 
   .hero{
     padding:56px 0 64px;
@@ -365,7 +376,10 @@
       <h1>Know the second<br>your wipe drops.<br><em>Not the hour after.</em></h1>
       <p class="lede">RustMetrics watches your servers and your friends' names around the clock — pop, ping, wipe countdown, and who just logged in — so you stop juggling server lists, Discord pings and a stale spreadsheet.</p>
       <div class="ctas">
-        <a class="btn btn-primary" href="/auth/steam/login">Start Watching — Free</a>
+        <a class="btn-steam" href="/auth/steam/login">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2C6.95 2 2.85 5.86 2.31 10.78l5.4 2.24a2.85 2.85 0 0 1 1.62-.5c.05 0 .11 0 .16.01l2.4-3.5v-.05a3.6 3.6 0 1 1 3.6 3.6h-.08l-3.44 2.46c0 .05.01.1.01.15a2.86 2.86 0 1 1-5.6.79L2.2 14.3C3.11 18.7 7.15 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2Zm-2.62 15.34-1.24-.5a2.16 2.16 0 0 0 4.01-.15 2.14 2.14 0 0 0-1.16-2.8 2.13 2.13 0 0 0-1.64-.02l1.28.53a1.59 1.59 0 1 1-1.21 2.94Zm8.4-9.4a2.4 2.4 0 1 0-2.4 2.4 2.4 2.4 0 0 0 2.4-2.4Zm-4.2 0a1.8 1.8 0 1 1 1.8 1.8 1.8 1.8 0 0 1-1.8-1.8Z"/></svg>
+          Sign in through Steam
+        </a>
         <a class="btn btn-ghost" href="#features">See what it tracks ↓</a>
       </div>
       <div class="microcopy">$ no credit card · no server admin needed · works on any Rust server</div>
@@ -515,19 +529,6 @@
 </div>
 </div>
 
-<script>
-  var names = ["aadal","·en·","Kowalski","dust2god","Nova_","ripstik","J4CKAL","Meridian"];
-  var servers = ["Rusty Moose","Stevious 2x Mondays","Facepunch 15","Atlas EU Monthly","Survivors.gg #3"];
-  var ni = 0;
-  setInterval(function(){
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    ni = (ni + 1) % names.length;
-    var nameEl = document.getElementById("tick-name");
-    var srvEl = document.getElementById("tick-server");
-    if (!nameEl || !srvEl) return;
-    nameEl.textContent = names[ni];
-    srvEl.textContent = servers[ni % servers.length];
-  }, 3200);
-</script>
+<script src="/landing.js?v=1"></script>
 </body>
 </html>

@@ -21,7 +21,7 @@
   <a href="/" class="legal-back">← Zurück</a>
   <h1>Datenschutzerklärung</h1>
 
-  <p>Stand: Mai 2026. Diese Erklärung erläutert die Datenverarbeitung beim Betrieb von
+  <p>Stand: September 2026. Diese Erklärung erläutert die Datenverarbeitung beim Betrieb von
      <strong>RustMetrics</strong> (rustmetrics.eu) — einem Hobby-/Community-Tool zum
      Tracken von Facepunch-Rust-Servern.</p>
 
@@ -47,6 +47,16 @@
   <p>Zusätzlich werden im Arbeitsspeicher des Anwendungsservers IP-Adressen
      für ein Rate-Limiting kurzzeitig vorgehalten (max. 1 h). Sie werden
      nicht dauerhaft gespeichert.</p>
+  <p>Aus diesen Logs erstellen wir auf unserem eigenen Server eine
+     <strong>tageweise Zugriffsstatistik</strong>: Anzahl Aufrufe, Anzahl
+     unterschiedlicher IP-Adressen, meistbesuchte Seiten sowie die Domains
+     verweisender Websites (z.&nbsp;B. reddit.com). Dabei werden
+     <strong>keine IP-Adressen, User-Agents oder vollständigen Referrer-URLs
+     gespeichert</strong> — nur die aggregierten Zahlen pro Tag, die keinen Rückschluss
+     auf einzelne Personen zulassen. Die Statistik dient der Weiterentwicklung und
+     dem Betrieb der Website; es werden keine Drittanbieter-Dienste eingesetzt und
+     keine Cookies gesetzt. Rechtsgrundlage: berechtigtes Interesse
+     (Art. 6 Abs. 1 lit. f DSGVO bzw. Art. 31 revDSG).</p>
 
   <h3>2.2 Beim Login mit Steam</h3>
   <p>Der Login läuft über <strong>Steam OpenID 2.0</strong> (betrieben von
@@ -72,7 +82,18 @@
   <p>Diese Daten sind ausschliesslich Ihrem Account zugeordnet und werden
      anderen Nutzern nicht angezeigt.</p>
 
-  <h3>2.4 Session-Cookie</h3>
+  <h3>2.4 Steam-Freunde</h3>
+  <p>Wenn Sie eingeloggt sind, fragen wir beim Öffnen der App über die
+     Steam Web API Ihre <strong>öffentliche Freundesliste</strong> und die
+     öffentlichen Profildaten Ihrer Freunde ab (Anzeige-Name, Avatar, aktuell
+     gespieltes Spiel und Server-Adresse), um Ihnen anzuzeigen, welche Freunde gerade
+     Rust spielen und auf welchem Server. Diese Daten werden
+     <strong>nur für die Anzeige verwendet und nicht in unserer Datenbank
+     gespeichert</strong>. Ist Ihre Freundesliste bei Steam privat, werden keine
+     Freundesdaten abgerufen. Rechtsgrundlage: Erfüllung des Nutzungsverhältnisses
+     (Art. 6 Abs. 1 lit. b DSGVO bzw. Art. 31 revDSG).</p>
+
+  <h3>2.5 Session-Cookie</h3>
   <p>Wir setzen genau <strong>einen</strong> Cookie: <code>rm_session</code>.
      Dieser enthält einen zufälligen opaken Token (kein Tracking, kein Inhalt).
      Der Cookie ist <code>HttpOnly</code>, <code>Secure</code> und
@@ -87,7 +108,10 @@
   <p>Eine Datenweitergabe in die USA findet nur statt, wenn Sie sich aktiv
      mit Steam einloggen — dann sendet Ihr Browser die OpenID-Verifikationsdaten
      an steamcommunity.com (Valve Corporation, USA). Rechtsgrundlage:
-     Art. 49 Abs. 1 lit. b DSGVO (erforderlich zur Vertragserfüllung).</p>
+     Art. 49 Abs. 1 lit. b DSGVO (erforderlich zur Vertragserfüllung).
+     Für die Anzeige von Profildaten und Steam-Freunden ruft unser Server
+     öffentliche Daten über die Steam Web API (api.steampowered.com) ab und
+     übermittelt dabei Ihre SteamID64.</p>
 
   <h2>4. Speicherdauer</h2>
   <dl>
@@ -101,6 +125,10 @@
     <dd>14 Tage nach Session-Ende.</dd>
     <dt>Caddy Access-Logs:</dt>
     <dd>30 Tage.</dd>
+    <dt>Tageweise Zugriffsstatistik (nur aggregierte Zahlen, ohne IP-Adressen):</dt>
+    <dd>unbefristet.</dd>
+    <dt>Steam-Freundesliste:</dt>
+    <dd>keine Speicherung.</dd>
   </dl>
 
   <h2>5. Ihre Rechte</h2>
@@ -130,7 +158,9 @@
 
   <h2>8. Keine Werbung, kein Tracking</h2>
   <p>RustMetrics enthält <strong>keine Werbung, keine Tracking-Pixel, keine
-     Analytics, keine Drittanbieter-Skripte</strong>. Die einzigen externen
+     Analytics-Dienste von Drittanbietern, keine Drittanbieter-Skripte</strong>.
+     Die einzige Auswertung ist die aggregierte Zugriffsstatistik aus Abschnitt 2.1,
+     die vollständig auf unserem eigenen Server erfolgt. Die einzigen externen
      Ressourcen sind beim Login die OpenID-Verifikation gegenüber Steam und
      beim Aufruf eines Spieler-Avatars die Avatar-Bilddatei vom Steam-CDN.</p>
 

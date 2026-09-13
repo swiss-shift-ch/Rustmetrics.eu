@@ -21,7 +21,7 @@
   <a href="/" class="legal-back">← Back</a>
   <h1>Privacy Policy</h1>
 
-  <p>Last updated: May 2026. This policy explains how data is processed when you use
+  <p>Last updated: September 2026. This policy explains how data is processed when you use
      <strong>RustMetrics</strong> (rustmetrics.eu) — a hobby/community tool for tracking
      Facepunch Rust servers.</p>
 
@@ -42,6 +42,12 @@
      and are used solely for secure operation (error analysis, abuse prevention).</p>
   <p>Additionally, the application keeps IP addresses in memory briefly (max 1 hour) for rate limiting.
      They are not stored persistently.</p>
+  <p>From these logs we derive <strong>daily traffic statistics</strong> on our own server: number of
+     requests, number of distinct IP addresses, most visited pages and the domains of referring websites
+     (e.g. reddit.com). <strong>No IP addresses, user agents or full referrer URLs are stored</strong> —
+     only aggregated per-day numbers that cannot be linked to individuals. The statistics are used to
+     operate and improve the site; no third-party services are involved and no cookies are set.
+     Legal basis: legitimate interest (Art. 6(1)(f) GDPR / Art. 31 revFADP).</p>
 
   <h3>2.2 When you sign in with Steam</h3>
   <p>Sign-in uses <strong>Steam OpenID 2.0</strong> (operated by Valve Corporation, USA). You never enter
@@ -63,7 +69,15 @@
   </ul>
   <p>This data is associated exclusively with your account and is not visible to other users.</p>
 
-  <h3>2.4 Session cookie</h3>
+  <h3>2.4 Steam friends</h3>
+  <p>When you are signed in and open the app, we query your <strong>public Steam friends list</strong> and
+     your friends' public profile data (display name, avatar, current game and server address) via the
+     Steam Web API to show which friends are playing Rust right now and on which server. This data is
+     <strong>used for display only and is not stored in our database</strong>. If your friends list is
+     private on Steam, nothing is retrieved. Legal basis: performance of the use agreement
+     (Art. 6(1)(b) GDPR / Art. 31 revFADP).</p>
+
+  <h3>2.5 Session cookie</h3>
   <p>We set exactly <strong>one</strong> cookie: <code>rm_session</code>. It contains a random opaque
      token (no tracking, no content). The cookie is <code>HttpOnly</code>, <code>Secure</code> and
      <code>SameSite=Lax</code>. Lifetime: 30 days by default or until logout. Legal basis: performance
@@ -74,7 +88,9 @@
      (data centre in Germany). Data is stored only there.</p>
   <p>A data transfer to the USA only occurs when you actively sign in with Steam — at that moment your
      browser sends OpenID verification data to steamcommunity.com (Valve Corporation, USA). Legal basis:
-     Art. 49(1)(b) GDPR (necessary for performance of contract).</p>
+     Art. 49(1)(b) GDPR (necessary for performance of contract). To show profile data and Steam friends,
+     our server retrieves public data from the Steam Web API (api.steampowered.com), which involves
+     sending your SteamID64.</p>
 
   <h2>4. Retention</h2>
   <dl>
@@ -88,6 +104,10 @@
     <dd>14 days after session end.</dd>
     <dt>Caddy access logs:</dt>
     <dd>30 days.</dd>
+    <dt>Daily traffic statistics (aggregated numbers only, no IP addresses):</dt>
+    <dd>indefinitely.</dd>
+    <dt>Steam friends list:</dt>
+    <dd>not stored.</dd>
   </dl>
 
   <h2>5. Your rights</h2>
@@ -113,8 +133,9 @@
      via fail2ban.</p>
 
   <h2>8. No ads, no tracking</h2>
-  <p>RustMetrics contains <strong>no advertising, no tracking pixels, no analytics, no third-party scripts</strong>.
-     The only external resources are: (a) OpenID verification with Steam during login, and
+  <p>RustMetrics contains <strong>no advertising, no tracking pixels, no third-party analytics, no third-party scripts</strong>.
+     The only evaluation is the aggregated traffic statistics described in section 2.1, computed entirely on our
+     own server. The only external resources are: (a) OpenID verification with Steam during login, and
      (b) the player avatar image hotlinked from the Steam CDN.</p>
 
   <h2>9. Changes</h2>

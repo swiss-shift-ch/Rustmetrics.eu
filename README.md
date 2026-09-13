@@ -15,7 +15,7 @@ Live: **<https://rustmetrics.eu>**
 - **Steam OpenID 2.0 login** — never enters your Steam password. Reads only your public SteamID64, display name, avatar.
 - **Detection of Facepunch "streamer-mode" anonymization** — flags servers where everyone shows as fake names so you know watchlisting won't work there.
 - **Discord webhook notifications** — paste a webhook URL, get DMs/channel-pings when watched players come online/offline.
-- **No ads, no premium tier, no analytics, no third-party scripts.** Only cookie is the session cookie.
+- **No ads, no premium tier, no third-party analytics or scripts.** Only cookie is the session cookie.
 
 ## Why
 
@@ -157,7 +157,7 @@ Per server (global, shared across users):
 - Server name, map, population snapshots (no PII)
 - Player session-start/end (just the in-game display name, no SteamIDs unless surfaced by BattleMetrics)
 
-No analytics, no third-party trackers, no email collection.
+No third-party analytics or trackers, no email collection. Aggregated daily traffic counts are derived server-side from the Caddy access log for the admin dashboard.
 Sole cookie set: `rm_session` (HttpOnly, Secure, SameSite=Lax).
 
 ## Security

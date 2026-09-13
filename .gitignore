@@ -47,3 +47,6 @@ build/
 # Test artifacts that contain runtime data
 test_output/
 .coverage
+
+# Local Claude campaign/planning files
+.claude/

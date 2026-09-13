@@ -62,8 +62,27 @@ from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F
 from rm_seo import canonical_redirect_location, render_browser_page
 
 
-_bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False}
+_bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False, "paused_until": 0.0}
 _bm_lock  = threading.Lock()
+BM_RATE_LIMIT_PAUSE_SEC = 60
+
+
+class BMPaused(RuntimeError):
+    """BattleMetrics answered 429; requests are held back until the pause ends."""
+
+
+def _bm_pause_after_429(retry_after: str | None) -> None:
+    try:
+        pause = max(1.0, float(retry_after)) if retry_after else BM_RATE_LIMIT_PAUSE_SEC
+    except ValueError:
+        pause = BM_RATE_LIMIT_PAUSE_SEC
+    with _bm_lock:
+        now = time.time()
+        starts_pause = now >= _bm_state["paused_until"]
+        _bm_state["paused_until"] = max(_bm_state["paused_until"], now + pause)
+    if starts_pause:
+        print(f"[battlemetrics] HTTP 429 — pausiere BM-Anfragen fuer {int(pause)}s",
+              file=sys.stderr, flush=True)
 
 def bm_available() -> bool:
     with _bm_lock:
@@ -89,6 +108,9 @@ def bm_get(url: str, timeout: float = 10.0):
     """Einziger Weg zu BattleMetrics — mit Token, Schutzschalter und Logging."""
     if not bm_available():
         raise RuntimeError("battlemetrics disabled (breaker open)")
+    with _bm_lock:
+        if time.time() < _bm_state["paused_until"]:
+            raise BMPaused("battlemetrics rate-limited, pausing")
     headers = {"User-Agent": BM_USER_AGENT, "Accept": "application/json"}
     if BM_TOKEN:
         headers["Authorization"] = f"Bearer {BM_TOKEN}"
@@ -99,6 +121,8 @@ def bm_get(url: str, timeout: float = 10.0):
         _bm_note_result(True)
         return data
     except urllib.error.HTTPError as e:
+        if e.code == 429:
+            _bm_pause_after_429(e.headers.get("Retry-After"))
         _bm_note_result(False, e.code)
         raise
     except Exception:
@@ -383,6 +407,9 @@ def fetch_player_summaries(steam_ids: list[int]) -> dict[int, dict]:
 _bm_id_cache: dict = {}
 _bm_id_lock = threading.Lock()
 BM_ID_CACHE_TTL = 86400  # 24h — BM-Server-IDs sind stabil
+BM_ID_RETRY_AFTER_ERROR_SEC = 300
+BM_DETAIL_CACHE_TTL = 60  # BM aktualisiert selbst seltener; spart ~2/3 der Detail-Anfragen
+_bm_detail_cache: dict[int, tuple[float, dict, list[tuple[int, str]]]] = {}
 
 def _bm_search_id(host: str, port: int) -> int | None:
     """
@@ -401,19 +428,21 @@ def get_bm_id(host: str, port: int) -> int | None:
     """Cached BM-ID-Lookup für Host:Port."""
     key = (host, port)
     with _bm_id_lock:
-        e = _bm_id_cache.get(key)
-        if e and (time.time() - e["ts"]) < BM_ID_CACHE_TTL:
-            return e["id"]
+        entry = _bm_id_cache.get(key)
+        if entry and (time.time() - entry["ts"]) < entry.get("ttl", BM_ID_CACHE_TTL):
+            return entry["id"]
     if not bm_available():
         return None
     try:
-        bm_id = _bm_search_id(host, port)
-    except Exception as e:
-        # Fehler (z.B. 429 nach einem Neustart) nicht cachen, sonst fehlt der Server 24h
-        print(f"[bm_search] {host}:{port}: {e}", file=sys.stderr, flush=True)
+        bm_id, ttl = _bm_search_id(host, port), BM_ID_CACHE_TTL
+    except BMPaused:
         return None
+    except Exception as err:
+        # Fehler nur kurz merken: nicht 24h ohne BM, aber auch kein Retry bei jedem Poll
+        print(f"[bm_search] {host}:{port}: {err}", file=sys.stderr, flush=True)
+        bm_id, ttl = None, BM_ID_RETRY_AFTER_ERROR_SEC
     with _bm_id_lock:
-        _bm_id_cache[key] = {"ts": time.time(), "id": bm_id}
+        _bm_id_cache[key] = {"ts": time.time(), "id": bm_id, "ttl": ttl}
     return bm_id
 
 def query_bm_server(host: str, port: int) -> tuple[dict | None, list[tuple[int, str]]]:
@@ -426,9 +455,16 @@ def query_bm_server(host: str, port: int) -> tuple[dict | None, list[tuple[int, 
     bm_id = get_bm_id(host, port)
     if not bm_id:
         return None, []
+    with _bm_id_lock:
+        cached = _bm_detail_cache.get(bm_id)
+    if cached and time.time() - cached[0] < BM_DETAIL_CACHE_TTL:
+        return cached[1], cached[2]
     try:
         url = f"{BATTLEMETRICS_URL}/{bm_id}?include=player"
         payload = bm_get(url, timeout=10)
+    except BMPaused:
+        # Waehrend einer 429-Pause lieber den letzten Stand zeigen als "offline"
+        return (cached[1], cached[2]) if cached else (None, [])
     except Exception as e:
         print(f"[bm_detail] id={bm_id}: {e}", file=sys.stderr, flush=True)
         return None, []
@@ -441,6 +477,8 @@ def query_bm_server(host: str, port: int) -> tuple[dict | None, list[tuple[int, 
         try: pid = int(p.get("id"))
         except (TypeError, ValueError): pid = 0
         pairs.append((pid, nm))
+    with _bm_id_lock:
+        _bm_detail_cache[bm_id] = (time.time(), attrs, pairs)
     return attrs, pairs
 
 

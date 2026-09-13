@@ -16,7 +16,7 @@ def _read_cstring(data: bytes, pos: int) -> tuple[str, int]:
     return data[pos:end].decode("utf-8", errors="replace"), end + 1
 
 
-def query_a2s(host: str, port: int, timeout: float = None) -> dict:
+def query_a2s(host: str, port: int, timeout: float = None, include_players: bool = True) -> dict:
     if timeout is None: timeout = A2S_TIMEOUT
     result = {"host": host, "port": port, "online": False, "queried_at": int(time.time())}
     try:
@@ -33,22 +33,8 @@ def query_a2s(host: str, port: int, timeout: float = None) -> dict:
             result["ping_ms"] = int((time.time() - t0) * 1000)
             result.update(_parse_a2s_info(data))
             result["online"] = True
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.settimeout(timeout)
-                s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + b"\xFF\xFF\xFF\xFF", addr)
-                data, _ = s.recvfrom(4096)
-                if len(data) >= 5 and data[4:5] == A2S_CHALLENGE_TYPE:
-                    challenge = data[5:9]
-                    s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + challenge, addr)
-                    data, _ = s.recvfrom(8192)
-                if data[:4] == b"\xFE\xFF\xFF\xFF":
-                    result["players_list"] = []
-                else:
-                    result["players_list"] = _parse_a2s_players(data)
-        except Exception as e:
-            result["players_list"] = []
-            result["players_error"] = f"{type(e).__name__}: {e}"
+        if include_players:
+            result.update(_query_a2s_players(addr, timeout))
     except TimeoutError:
         result["error"] = "timeout"
     except OSError as e:
@@ -56,6 +42,23 @@ def query_a2s(host: str, port: int, timeout: float = None) -> dict:
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {e}"
     return result
+
+
+def _query_a2s_players(addr: tuple[str, int], timeout: float) -> dict:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(timeout)
+            s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + b"\xFF\xFF\xFF\xFF", addr)
+            data, _ = s.recvfrom(4096)
+            if len(data) >= 5 and data[4:5] == A2S_CHALLENGE_TYPE:
+                challenge = data[5:9]
+                s.sendto(A2S_HEADER + A2S_PLAYER_REQHDR + challenge, addr)
+                data, _ = s.recvfrom(8192)
+            if data[:4] == b"\xFE\xFF\xFF\xFF":
+                return {"players_list": []}
+            return {"players_list": _parse_a2s_players(data)}
+    except Exception as e:
+        return {"players_list": [], "players_error": f"{type(e).__name__}: {e}"}
 
 
 def _parse_a2s_info(data: bytes) -> dict:

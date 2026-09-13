@@ -51,6 +51,7 @@ from rm_config import (  # noqa: F401
     STEAM_REGION_ALL, REGION_BYTES, COOKIE_NAME,
 )
 from rm_a2s import query_a2s  # noqa: F401
+from rm_a2s_blocklist import MODE_FULL, MODE_PLAYERS, A2SBlocklist
 from rm_rust import (  # noqa: F401
     parse_rust_keywords, detect_rust_tier, detect_rust_category,
     detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
@@ -1293,14 +1294,26 @@ def _notify_player_transitions(cur, server_id: int, server_name: str,
             fire_discord_webhook_async(wh, embed)
 
 
+_a2s_blocklist = A2SBlocklist()
+
+
 def poll_server_row(row: dict) -> dict:
-    q = query_a2s(row["host"], row["port"])
+    host, port = row["host"], row["port"]
+    # Bekannte A2S-Blocker direkt ueber BM holen, statt jedes Mal den Timeout abzuwarten
+    blocked = _a2s_blocklist.mode(host, port) if bm_available() else None
+    if blocked == MODE_FULL:
+        q = {"host": host, "port": port, "online": False, "queried_at": int(time.time())}
+    else:
+        q = query_a2s(host, port, include_players=blocked != MODE_PLAYERS)
+    a2s_online = bool(q.get("online"))
+    a2s_players_failed = "players_error" in q
 
     # Wenn A2S nicht alle Daten liefert (Server blockt A2S_INFO oder _PLAYER):
     # BattleMetrics-Fallback. Spart Resourcen indem wir nur dann BM anfragen,
     # wenn A2S nicht das volle Bild liefert.
     a2s_has_pop     = q.get("players_count") is not None and q.get("max_players") is not None
     a2s_has_players = bool(q.get("players_list"))
+    bm_attrs = None
     bm_pairs: list[tuple[int, str]] = []
     if not a2s_has_pop or not a2s_has_players:
         try:
@@ -1329,6 +1342,16 @@ def poll_server_row(row: dict) -> dict:
                     for bid, nm in bm_pairs
                 ]
             q["_data_source"] = "a2s+bm" if (q.get("ping_ms") is not None) else "bm-only"
+
+    if blocked is None:
+        new_block = _a2s_blocklist.record(
+            host, port,
+            a2s_online=a2s_online, a2s_players_failed=a2s_players_failed,
+            bm_online=bool(bm_attrs) and bm_attrs.get("status") == "online",
+            bm_has_players=bool(bm_pairs))
+        if new_block:
+            print(f"[a2s-blocklist] {host}:{port} blockt A2S ({new_block}) — BM zuerst bis zum naechsten Recheck",
+                  flush=True)
 
     came_online: set = set()
     went_offline: set = set()

@@ -109,6 +109,16 @@ def ensure_migrations():
                    server_addr TEXT,
                    updated_at  BIGINT NOT NULL DEFAULT 0
                )""")
+        if not _table_exists(cur, "traffic_daily"):
+            todo.append("""CREATE TABLE traffic_daily (
+                   day            DATE PRIMARY KEY,
+                   hits_total     INTEGER NOT NULL DEFAULT 0,
+                   unique_ips     INTEGER NOT NULL DEFAULT 0,
+                   reddit_hits    INTEGER NOT NULL DEFAULT 0,
+                   top_paths      JSONB   NOT NULL DEFAULT '[]',
+                   top_referers   JSONB   NOT NULL DEFAULT '[]',
+                   updated_at     BIGINT  NOT NULL DEFAULT 0
+               )""")
     for stmt in todo:               # leer = Schema aktuell, kein Log-Rauschen
         try:
             with _Conn() as (conn, cur):

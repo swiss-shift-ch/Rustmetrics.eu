@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import glob
+import gzip
 import os
 import re
 import secrets
@@ -2428,6 +2430,146 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
 #  ADMIN STATS
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _iter_caddy_log_lines(base_path: str):
+    """Yields lines from all still-retained rotated (.gz) log siblings, oldest
+    first, then the active log file. Best-effort: unreadable files are skipped."""
+    d = os.path.dirname(base_path)
+    stem = os.path.splitext(os.path.basename(base_path))[0]
+    rotated = sorted(glob.glob(os.path.join(d, f"{stem}-*.log.gz")))
+    for gz_path in rotated:
+        try:
+            with gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    yield line
+        except Exception:
+            continue
+    try:
+        with open(base_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                yield line
+    except Exception:
+        pass
+
+
+_RE_TRAFFIC_IP      = re.compile(r'"(?:client_ip|remote_ip|remote_addr)"\s*:\s*"([^"]+)"')
+_RE_TRAFFIC_URI     = re.compile(r'"uri"\s*:\s*"([^"]+)"')
+_RE_TRAFFIC_STATUS  = re.compile(r'"status"\s*:\s*(\d+)')
+_RE_TRAFFIC_REFERER = re.compile(r'"Referer"\s*:\s*\[\s*"([^"]+)"')
+_RE_TRAFFIC_TS      = re.compile(r'"ts"\s*:\s*([\d.]+)')
+_RE_TRAFFIC_LOGDATE = re.compile(r'^(\d{4})/(\d{2})/(\d{2})[ \t]')
+
+
+def _ingest_traffic_history(days_keep: int = 60) -> int:
+    """
+    Aggregiert das Caddy-Access-Log (aktive Datei + noch vorhandene .gz-Rotationen)
+    pro Kalendertag (UTC) in die Postgres-Tabelle traffic_daily.
+
+    Grund: parse_caddy_log_tail() liest nur die letzten paar MB der aktiven Datei
+    (Momentaufnahme, "seit wann online" ist nicht beantwortbar). Caddy rotiert
+    rustmetrics.log ab 10 MB und behaelt nur die letzten 5 Rotationen
+    (roll_keep 5, roll_keep_for 720h) - bei der aktuellen Traffic-Rate sind das
+    real nur ca. 2 Tage, aeltere Daten (z.B. ein Reddit-Launch-Peak) sind dann
+    unwiderruflich weg.
+
+    Diese Funktion schreibt jeden Tag, fuer den gerade Log-Daten vorliegen,
+    komplett neu in traffic_daily (UPSERT, kein Aufsummieren) - dadurch ist ein
+    wiederholter Lauf idempotent und es gibt keine Doppelzaehlung. Sie laeuft
+    alle 15 Minuten (siehe traffic_history_loop) - deutlich oefter als Caddy
+    rotiert - damit jeder Tag mindestens einmal vollstaendig erfasst wird, bevor
+    seine Log-Zeilen aus den verbleibenden .gz-Dateien herausfallen. Einmal
+    geschriebene Tage bleiben stehen, auch wenn ihre Rohdaten laengst rotiert
+    und geloescht sind - das IST die Historie.
+    """
+    per_day: dict[str, dict] = {}
+    cutoff_day = time.strftime("%Y-%m-%d", time.gmtime(time.time() - days_keep * 86400))
+
+    for line in _iter_caddy_log_lines(CADDY_LOG_PATH):
+        if not line.strip() or ('"request"' not in line and '"uri"' not in line):
+            continue
+        # 1) bevorzugt echtes JSON-"ts" (falls Caddy je auf format json umgestellt wird)
+        m_ts = _RE_TRAFFIC_TS.search(line)
+        if m_ts:
+            try:
+                day = time.strftime("%Y-%m-%d", time.gmtime(float(m_ts.group(1))))
+            except ValueError:
+                day = None
+        else:
+            day = None
+        # 2) sonst Klartext-Datum vom Zeilenanfang (aktuelles "console"-Format)
+        if day is None:
+            m_ld = _RE_TRAFFIC_LOGDATE.match(line)
+            if not m_ld:
+                continue
+            day = f"{m_ld.group(1)}-{m_ld.group(2)}-{m_ld.group(3)}"
+        if day < cutoff_day:
+            continue
+        m_uri = _RE_TRAFFIC_URI.search(line)
+        if not m_uri:
+            continue
+        m_st = _RE_TRAFFIC_STATUS.search(line)
+        if m_st and int(m_st.group(1)) >= 400:
+            continue
+
+        bucket = per_day.setdefault(
+            day, {"hits": 0, "ips": set(), "reddit": 0, "paths": {}, "refs": {}})
+        bucket["hits"] += 1
+
+        uri = m_uri.group(1)
+        if not (uri.startswith("/api/") or uri.startswith("/favicon")
+                or uri.endswith((".css", ".js", ".png", ".svg", ".ico", ".webmanifest"))):
+            stem_uri = uri.split("?", 1)[0]
+            bucket["paths"][stem_uri] = bucket["paths"].get(stem_uri, 0) + 1
+
+        m_ip = _RE_TRAFFIC_IP.search(line)
+        if m_ip:
+            bucket["ips"].add(m_ip.group(1))
+
+        m_rf = _RE_TRAFFIC_REFERER.search(line)
+        if m_rf and m_rf.group(1):
+            try:
+                host = urllib.parse.urlparse(m_rf.group(1)).netloc or m_rf.group(1)
+                bucket["refs"][host] = bucket["refs"].get(host, 0) + 1
+                if "reddit" in host.lower():
+                    bucket["reddit"] += 1
+            except Exception:
+                pass
+
+    if not per_day:
+        return 0
+
+    now = int(time.time())
+    with _Conn() as (conn, cur):
+        for day, b in per_day.items():
+            top_paths = sorted(b["paths"].items(), key=lambda x: -x[1])[:15]
+            top_refs  = sorted(b["refs"].items(), key=lambda x: -x[1])[:10]
+            cur.execute(
+                "INSERT INTO traffic_daily "
+                "(day, hits_total, unique_ips, reddit_hits, top_paths, top_referers, updated_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (day) DO UPDATE SET "
+                "hits_total=EXCLUDED.hits_total, unique_ips=EXCLUDED.unique_ips, "
+                "reddit_hits=EXCLUDED.reddit_hits, top_paths=EXCLUDED.top_paths, "
+                "top_referers=EXCLUDED.top_referers, updated_at=EXCLUDED.updated_at",
+                (day, b["hits"], len(b["ips"]), b["reddit"],
+                 json.dumps(top_paths), json.dumps(top_refs), now))
+    return len(per_day)
+
+
+_traffic_ingest_stop = threading.Event()
+
+
+def traffic_history_loop():
+    print("[traffic-history] gestartet", flush=True)
+    while not _traffic_ingest_stop.is_set():
+        try:
+            n = _ingest_traffic_history()
+            if n:
+                print(f"[traffic-history] {n} Tag(e) aktualisiert", flush=True)
+        except Exception as e:
+            print(f"[traffic-history] WARN: {type(e).__name__}: {e}", flush=True)
+        _traffic_ingest_stop.wait(900)
+
+
 def parse_caddy_log_tail(path: str = None, max_bytes: int = None) -> dict:
     """
     Liest die letzten max_bytes des Caddy-Access-Logs und extrahiert:
@@ -2633,6 +2775,16 @@ def admin_stats_data() -> dict:
             (now - 14 * 86400,))
         data["signups_by_day"] = [(str(r["day"]), r["c"]) for r in cur.fetchall()]
 
+    # Persistierte Traffic-Historie (ueberlebt Caddy-Log-Rotation)
+    with _Conn() as (conn, cur):
+        cur.execute(
+            "SELECT day, hits_total, unique_ips, reddit_hits FROM traffic_daily "
+            "WHERE day > CURRENT_DATE - INTERVAL '30 days' ORDER BY day")
+        data["traffic_history"] = [
+            {"day": str(r["day"]), "hits": r["hits_total"],
+             "ips": r["unique_ips"], "reddit": r["reddit_hits"]}
+            for r in cur.fetchall()]
+
     # Caddy-Log Stats (best effort, kann fehlen)
     data["caddy"] = parse_caddy_log_tail()
     return data
@@ -2721,6 +2873,42 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
             "<div style='display:flex; gap:3px; align-items:flex-end; padding:8px 0;'>"
             + "".join(bars) + "</div>"
             f"<p class='hint' style='text-align:right; font-size:11px;'>last 14 days · max {max_v}/day</p>")
+
+    # Traffic-History Section (persistiert, ueberlebt Log-Rotation)
+    hist = d.get("traffic_history") or []
+    if hist:
+        hmax = max(h["hits"] for h in hist) or 1
+        bars = []
+        for h in hist:
+            hday, hhits, hips, hreddit = h["day"], h["hits"], h["ips"], h["reddit"]
+            bh = int(40 * hhits / hmax) if hmax else 0
+            bar_title = f"{hday}: {hhits} hits, {hips} IPs, {hreddit} reddit"
+            bars.append(
+                f"<div title='{bar_title}' style='flex:1; min-width:6px; "
+                f"display:flex; flex-direction:column; align-items:center;'>"
+                f"<div style='width:100%; height:42px; display:flex; align-items:flex-end;'>"
+                f"<div style='width:100%; height:{max(2,bh)}px; background:var(--accent); border-radius:2px;'></div>"
+                f"</div></div>")
+        total_hits   = sum(h["hits"] for h in hist)
+        total_reddit = sum(h["reddit"] for h in hist)
+        history_html = f"""
+        <section class="detail-section">
+          <h3>Traffic history · persisted daily ({len(hist)} days)</h3>
+          <dl class="detail-meta">
+            <dt>Total requests in window</dt><dd>{fnum(total_hits)}</dd>
+            <dt>Reddit referrals in window</dt><dd>{fnum(total_reddit)}</dd>
+            <dt>First day recorded</dt><dd>{_esc(hist[0]['day'])}</dd>
+          </dl>
+          <div style="display:flex; gap:2px; align-items:flex-end; padding:8px 0;">{"".join(bars)}</div>
+          <p class="hint" style="text-align:right; font-size:11px;">last {len(hist)} days · max {fnum(hmax)}/day · survives Caddy log rotation</p>
+        </section>"""
+    else:
+        history_html = """
+        <section class="detail-section">
+          <h3>Traffic history · persisted daily</h3>
+          <p class="hint">Noch keine Tage aggregiert - der Hintergrund-Job (traffic_history_loop) laeuft alle 15 Minuten
+             und schreibt nach traffic_daily. Kurz nach Deploy kann diese Liste leer sein.</p>
+        </section>"""
 
     # Caddy-Log Section
     caddy = d["caddy"]
@@ -2847,6 +3035,8 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
     <h3>Recent signups</h3>
     {signups_table}
   </section>
+
+  {history_html}
 
   {caddy_html}
 
@@ -4079,6 +4269,8 @@ def main():
     tp.start()
     tw = threading.Thread(target=browse_warmer_loop, daemon=True)
     tw.start()
+    th = threading.Thread(target=traffic_history_loop, daemon=True)
+    th.start()
 
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     httpd.daemon_threads = True

@@ -299,7 +299,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
 .hint {
   margin: 10px 0 0 0;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text);
 }
 
 /* ─── Server-Grid (Watchlist) ───────────────────────────────────────── */
@@ -466,7 +466,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
 .watchlist-header strong { color: var(--text-muted); font-weight: 700; }
 
 .watchlist-empty {
-  color: var(--text-dim); font-style: italic; font-size: 12px;
+  color: var(--text); font-style: italic; font-size: 12px;
   text-align: center; padding: 6px 0;
 }
 
@@ -1534,7 +1534,7 @@ a.player-name.plink:hover {
 .view-btn {
   background: transparent;
   border: 1px solid var(--border-strong);
-  color: var(--text-muted);
+  color: var(--text);
   padding: 6px 12px;
   border-radius: 2px;
   font-size: 11px;

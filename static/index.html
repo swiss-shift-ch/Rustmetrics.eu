@@ -50,15 +50,15 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260913i" />
+<link rel="stylesheet" href="/style.css?v=20260913k" />
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">
+  <a class="brand" href="/landing.html" title="RustMetrics — Home" style="text-decoration:none; color:inherit;">
     <span class="brand-mark" aria-hidden="true"></span>
     <h1 class="brand-name">RUST<span class="brand-name-accent">METRICS</span></h1>
-  </div>
+  </a>
 
   <div class="topbar-stats" id="topbar-stats" title="Your watchlist" hidden>
     <span class="stat"><span class="stat-num" id="stat-servers">0</span><span class="stat-label">Watched</span></span>
@@ -78,6 +78,10 @@
 <div class="app">
 
   <nav class="sidebar">
+    <a class="nav-item" href="/landing.html" aria-label="Home" title="Home">
+      <span class="nav-icon" aria-hidden="true">⌂</span>
+      <span class="nav-label">Home</span>
+    </a>
     <button class="nav-item is-active" data-tab="watchlist" aria-label="Watchlist" title="Watchlist">
       <span class="nav-icon" aria-hidden="true">▦</span>
       <span class="nav-label">Watchlist</span>
@@ -437,6 +441,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260913i"></script>
+<script src="/app.js?v=20260913k"></script>
 </body>
 </html>

@@ -4015,6 +4015,14 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        # Root: eingeloggte User sehen die App (index.html, via Static-Fallback
+        # unten), ausgeloggte Besucher die Marketing-Landingpage.
+        if u.path == "/":
+            sess = self._read_session()
+            if not sess:
+                return self._send_html(os.path.join(STATIC_DIR, "landing.html"))
+            # fällt durch zu super().do_GET() -> serviert index.html normal
+
         # Default: static files
         return super().do_GET()
 

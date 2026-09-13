@@ -776,6 +776,8 @@ a:hover { color: var(--accent); text-decoration: underline; }
 .brow-link:hover { text-decoration: none; }
 .brow-link:hover strong { color: var(--accent-bright); text-decoration: underline; }
 .via-bm { color: inherit; text-decoration: underline dotted; }
+.friends-here { margin: 0 0 10px; font-size: 12px; color: var(--text-muted); }
+.friends-here strong { color: var(--green); font-weight: 700; }
 .via-bm:hover { color: var(--text); }
 .brow-name .brow-tags {
   display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 3px;

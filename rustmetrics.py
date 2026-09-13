@@ -56,7 +56,8 @@ from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist
 from rm_rust import (  # noqa: F401
     parse_rust_keywords, detect_rust_tier, detect_rust_category,
     detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
-    next_wipe_estimate, pick_bm_server_id, _REGION_FILTER_ALIASES, _REGION_GROUPS,
+    next_wipe_estimate, pick_bm_server_id, match_presence_server, presence_query_port,
+    _REGION_FILTER_ALIASES, _REGION_GROUPS,
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
@@ -353,7 +354,7 @@ def api_friends_in_rust(user_id: int) -> dict:
 
     # Servernamen und Watchlist-Status anreichern
     ips = [f["server_ip"] for f in playing if f["server_ip"]]
-    known: dict[str, dict] = {}
+    rows: list[dict] = []
     if ips:
         with _Conn() as (conn, cur):
             cur.execute(
@@ -361,14 +362,18 @@ def api_friends_in_rust(user_id: int) -> dict:
                 "  EXISTS(SELECT 1 FROM watched_servers w "
                 "         WHERE w.server_id=s.id AND w.user_id=%s) AS watched "
                 "FROM servers s WHERE s.host = ANY(%s)", (user_id, ips))
-            for r in cur.fetchall():
-                known[r["host"]] = {"server_id": r["id"], "name": r["name"],
-                                    "port": r["port"], "watched": r["watched"]}
+            rows = [dict(r) for r in cur.fetchall()]
+    # Mehrere Server pro IP (z.B. Facepunch 8/9): per Port zuordnen, Watchlist-Server zuerst
+    rows_watched_first = sorted(rows, key=lambda r: not r["watched"])
+    browse_rows = _cached_browse_servers() if playing else []
     for f in playing:
-        k = known.get(f["server_ip"] or "")
-        f["server_name"]  = (k or {}).get("name")
-        f["server_id"]    = (k or {}).get("server_id")
+        k = match_presence_server(rows_watched_first, f["server_ip"], f["server_addr"])
+        # Server, die noch niemand beobachtet: Name und Query-Port aus der Browser-Serverliste
+        listed = None if k else match_presence_server(browse_rows, f["server_ip"], f["server_addr"])
+        f["server_name"]  = (k or listed or {}).get("name")
+        f["server_id"]    = (k or {}).get("id")
         f["on_watchlist"] = bool((k or {}).get("watched"))
+        f["server_query_port"] = (k or listed or {}).get("port") or presence_query_port(f["server_addr"])
     return {"available": True, "friends": playing, "total_friends": len(friends),
             "playing": len(playing)}
 

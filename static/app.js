@@ -18,6 +18,7 @@
   let currentTab     = "watchlist";
   let browseFetched  = false;
   let me             = null;
+  let friendsCache   = [];
   // Sort state for detail-drawer player lists (persists across auto-refresh)
   const detailSort = {
     current: "name_asc",       // name_asc | name_desc
@@ -318,10 +319,15 @@
   }
 
   function renderWatchlistSub(s) {
-    const anonWarn = s.name_anonymized ? `
+    const friendsHere = friendsCache.filter(f => f.server_id === s.id);
+    const friendsLine = friendsHere.length ? `
+      <div class="friends-here" title="Your Steam friends on this server right now — real Steam names, even when the server hides names">
+        Friends here: ${friendsHere.map(f => `<strong>${fmt.escape(f.persona)}</strong>`).join(", ")}
+      </div>` : "";
+    const anonWarn = friendsLine + (s.name_anonymized ? `
       <div class="anon-warn anon-warn-compact" title="Facepunch streamer mode / censorplayerlist — this server's public player list shows random names, so name-watching won't work here. Workaround: add players by SteamID64 or Steam profile URL instead — Steam presence tracking sees them anyway (requires their profile's game details to be public).">
         ⚠ Names randomized here — <strong>use SteamID64 instead</strong> <span class="anon-warn-info">ⓘ</span>
-      </div>` : "";
+      </div>` : "");
     const items = (s.watched_players || []).map(w => {
       const nameHTML = w.bm_player_id
         ? `<a class="player-name plink" href="/player/${w.bm_player_id}" target="_blank" rel="noopener">${fmt.escape(w.name)}</a>`
@@ -555,6 +561,11 @@
     if (!els.friendsSection || !isAuthed()) return;
     try {
       const d = await api("/api/me/friends");
+      const nextFriends = d.available ? d.friends : [];
+      const placement = list => JSON.stringify(list.map(f => [f.steam_id, f.persona, f.server_id]));
+      const friendsMoved = placement(nextFriends) !== placement(friendsCache);
+      friendsCache = nextFriends;
+      if (friendsMoved && serversCache.length) renderServers();
       if (!d.available || !d.friends.length) {
         els.friendsSection.hidden = true;
         return;
@@ -572,6 +583,7 @@
                data-friend-name="${fmt.escape(f.persona)}">+ Track</button>`
           : (f.server_ip
              ? `<button class="btn-small" data-friend-addserver="${fmt.escape(f.server_ip)}"
+                  data-friend-port="${Number(f.server_query_port) || ""}"
                   data-friend-steam="${fmt.escape(f.steam_id)}"
                   data-friend-name="${fmt.escape(f.persona)}">+ Server & Track</button>`
              : "");
@@ -601,7 +613,7 @@
         // Server zuerst auf die Watchlist, dann den Freund per SteamID tracken
         const r = await api("/api/servers", {
           method: "POST",
-          body: JSON.stringify({ host: addsrv.dataset.friendAddserver, port: 28015 })
+          body: JSON.stringify({ host: addsrv.dataset.friendAddserver, port: parseInt(addsrv.dataset.friendPort, 10) || 28015 })
         });
         await api(`/api/server/${r.id}/watch`, {
           method: "POST",

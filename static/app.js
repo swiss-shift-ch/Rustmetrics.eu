@@ -419,7 +419,9 @@
         <footer class="card-footer">
           <span class="last-update">${snap?.error
             ? `<span style="color:var(--red)">${fmt.escape(snap.error)}</span>`
-            : `updated ${updated}`}</span>
+            : `updated ${updated}${s.via_battlemetrics
+                ? ' · via <a class="via-bm" href="https://www.battlemetrics.com/" target="_blank" rel="noopener">BattleMetrics</a>'
+                : ""}`}</span>
           <span class="wipe-info">${wipe}</span>
           <button class="btn-small" data-open-detail="${s.id}">Details</button>
           <button class="btn-small danger" data-remove-server="${s.id}" title="Remove">×</button>

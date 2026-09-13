@@ -1286,6 +1286,19 @@ def _notify_player_transitions(cur, server_id: int, server_name: str,
 
 _a2s_blocklist = A2SBlocklist()
 
+BATTLEMETRICS_CREDIT_HTML = (
+    ' · via <a class="via-bm" href="https://www.battlemetrics.com/" '
+    'target="_blank" rel="noopener">BattleMetrics</a>')
+
+
+def _served_by_battlemetrics(host: str, port: int) -> bool:
+    return bm_available() and _a2s_blocklist.mode(host, port) is not None
+
+
+def _bm_credit_html(source: str, host: str, port: int) -> str:
+    uses_bm = source == "battlemetrics-live" or _served_by_battlemetrics(host, port)
+    return BATTLEMETRICS_CREDIT_HTML if uses_bm else ""
+
 
 def poll_server_row(row: dict) -> dict:
     host, port = row["host"], row["port"]
@@ -1829,6 +1842,7 @@ def api_servers_list(user_id: int) -> list[dict]:
                     (snap.get("name") if snap else None) or r["name"], parsed.get("tags", [])),
                 "watched_players": watched,
                 "name_anonymized": bool(r.get("is_anonymized")) or detect_name_anonymization(players),
+                "via_battlemetrics": _served_by_battlemetrics(r["host"], r["port"]),
             })
     return out
 
@@ -2422,7 +2436,7 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
   <section class="detail-section">
     <h3>Data source</h3>
     <p style="color:var(--text-muted); font-size:12px;">
-      {_esc(source)} · {updated_html}
+      {_esc(source)} · {updated_html}{_bm_credit_html(source, host, port)}
     </p>
   </section>
 

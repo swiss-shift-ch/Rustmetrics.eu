@@ -139,7 +139,7 @@
   function syncUrl(name, historyMode) {
     document.title = TAB_TITLES[name] || HOME_TITLE;
     if (historyMode === "none") return;
-    const path = TAB_PATHS[name] || "/";
+    const path = TAB_PATHS[name] || "/app";
     if (location.pathname === path) return;
     const method = historyMode === "replace" ? "replaceState" : "pushState";
     try { history[method]({ tab: name }, "", path); } catch (e) {}

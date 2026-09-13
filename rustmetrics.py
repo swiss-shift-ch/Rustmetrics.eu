@@ -3022,7 +3022,7 @@ def render_admin_stats_page(user_session: dict) -> tuple[str, int]:
   </div>
   <div class="topbar-actions" style="margin-left:auto;">
     <span style="color:var(--text-dim); font-size:12px;">admin · {_esc(user_name)}</span>
-    <a class="btn-ghost" href="/" style="text-decoration:none;">← App</a>
+    <a class="btn-ghost" href="/app" style="text-decoration:none;">← App</a>
   </div>
 </header>
 
@@ -3498,7 +3498,7 @@ def render_player_profile_page(bm_id: int) -> tuple[str, int]:
     <a class="btn-steam" href="/auth/steam/login" data-anon-only style="text-decoration:none;">
       <span class="steam-icon" aria-hidden="true">⌬</span> Sign in to watch
     </a>
-    <a class="btn-ghost" href="/" data-auth-only style="text-decoration:none; display:none;">
+    <a class="btn-ghost" href="/app" data-auth-only style="text-decoration:none; display:none;">
       ← My watchlist
     </a>
   </div>
@@ -3574,7 +3574,7 @@ def _public_player_404_html(bm_id: int) -> str:
   <h1>Player not found</h1>
   <p>We don't track BattleMetrics player <code>#{int(bm_id)}</code> yet.
      Players appear on RustMetrics once they've been seen on a server in our watchlist database.</p>
-  <p>Try the <a href="/">Server Browser</a> to find live servers.</p>
+  <p>Try the <a href="/browser">Server Browser</a> to find live servers.</p>
 </article>
 </body></html>"""
 
@@ -3600,7 +3600,7 @@ def _public_404_html(host: str, port: int) -> str:
   <p>BattleMetrics doesn't know <code>{_esc(host)}:{port}</code>, and we don't have it
      in our database either. Either the IP/port is wrong, or the server is offline and
      not tracked anywhere.</p>
-  <p>Try the <a href="/">Server Browser</a> to find live servers.</p>
+  <p>Try the <a href="/browser">Server Browser</a> to find live servers.</p>
 </article>
 </body></html>"""
 
@@ -4015,13 +4015,11 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        # Root: eingeloggte User sehen die App (index.html, via Static-Fallback
-        # unten), ausgeloggte Besucher die Marketing-Landingpage.
+        # Root ist immer die Landingpage; die App lebt unter /app
         if u.path == "/":
-            sess = self._read_session()
-            if not sess:
-                return self._send_html(os.path.join(STATIC_DIR, "landing.html"))
-            # fällt durch zu super().do_GET() -> serviert index.html normal
+            return self._send_html(os.path.join(STATIC_DIR, "landing.html"))
+        if u.path in ("/app", "/app/"):
+            return self._send_html(os.path.join(STATIC_DIR, "index.html"))
 
         # Default: static files
         return super().do_GET()
@@ -4181,7 +4179,7 @@ class Handler(SimpleHTTPRequestHandler):
             steamid64, ip=self._client_ip(),
             ua=self.headers.get("User-Agent", "")[:255]
         )
-        return self._redirect("/", set_cookie=token)
+        return self._redirect("/app", set_cookie=token)
 
     def _api_me(self):
         sess = self._read_session()

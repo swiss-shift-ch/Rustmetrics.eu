@@ -210,6 +210,9 @@ def detect_rust_group_limit(name, tags) -> int | None:
     return None
 
 
+ANON_DETECTION_MIN_NAMES = 15
+
+
 def detect_name_anonymization(player_names: list[str]) -> bool:
     """
     Erkennt Facepunch-style Name-Randomisierung. Heuristik fingerprintet:
@@ -220,7 +223,7 @@ def detect_name_anonymization(player_names: list[str]) -> bool:
     Mixed-Case-Namen + 1-2 Zufalls-Duplikaten dürfen nicht fälschlich anschlagen.
     """
     real_names = [n for n in player_names if (n or "").strip()]
-    if len(real_names) < 15:
+    if len(real_names) < ANON_DETECTION_MIN_NAMES:
         return False
     seen = set()
     dupes = 0

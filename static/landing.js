@@ -10,7 +10,8 @@
       if (steamBtn) {
         steamBtn.classList.remove("btn-steam");
         steamBtn.classList.add("btn", "btn-primary");
-        steamBtn.innerHTML = "Continue to App &rarr;";
+        // No literal arrow here — .btn-primary::after already renders one.
+        steamBtn.textContent = "Continue to App";
       }
     })
     .catch(function(){});

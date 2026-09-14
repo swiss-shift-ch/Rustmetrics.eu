@@ -14,31 +14,38 @@ SOURCE_SERVER = "server"
 ACTION_OPEN = "open"
 ACTION_CLOSE = "close"
 
+# Ohne erfolgreiche Beobachtung ueber so viele Presence-Polls gilt eine offene Session als verwaist.
+PRESENCE_STALE_POLLS = 5
+
 Interval = tuple[int, int]
 
 
-def _addr_ip(addr: str | None) -> str | None:
-    """'ip:port' -> 'ip'. Steam reports the game port, so only the IP identifies a server."""
-    if not addr:
-        return None
-    return addr.rsplit(":", 1)[0] if ":" in addr else addr
-
-
-def presence_session_actions(has_open: bool, open_addr: str | None,
-                             in_rust: bool, server_addr: str | None) -> tuple[str, ...]:
+def presence_session_actions(has_open: bool, in_rust: bool) -> tuple[str, ...]:
     """Decide how presence_sessions must change for one observation.
 
     Based on the stored open session rather than the previous presence row, so
     a player who is already online when tracking starts still gets a session.
+    Server switches keep one continuous session: no server address is stored.
     """
-    if not in_rust:
-        return (ACTION_CLOSE,) if has_open else ()
-    if not has_open:
+    if in_rust and not has_open:
         return (ACTION_OPEN,)
-    old_ip, new_ip = _addr_ip(open_addr), _addr_ip(server_addr)
-    if old_ip and new_ip and old_ip != new_ip:
-        return (ACTION_CLOSE, ACTION_OPEN)
+    if has_open and not in_rust:
+        return (ACTION_CLOSE,)
     return ()
+
+
+def stale_session_end(start_ts: int, presence_updated_at: int | None,
+                      now: int, max_age: int) -> int | None:
+    """End timestamp for an open session whose presence is no longer observed; None while fresh.
+
+    Stale sessions end at the last successful observation (never before their start),
+    so polling gaps such as a service outage are not counted as online time.
+    """
+    if presence_updated_at is None:
+        return start_ts
+    if now - presence_updated_at <= max_age:
+        return None
+    return max(start_ts, presence_updated_at)
 
 
 def clip_interval(start: int, end: int | None, window_start: int, now: int) -> Interval | None:

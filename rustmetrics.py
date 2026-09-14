@@ -51,8 +51,8 @@ from rm_config import (  # noqa: F401
     STEAM_REGION_ALL, REGION_BYTES, COOKIE_NAME,
 )
 from rm_a2s import query_a2s  # noqa: F401
-from rm_rhythm import (ACTION_CLOSE, ACTION_OPEN, RHYTHM_WINDOW_SEC, build_rhythm,
-                       presence_session_actions)
+from rm_rhythm import (ACTION_CLOSE, ACTION_OPEN, PRESENCE_STALE_POLLS, RHYTHM_WINDOW_SEC,
+                       build_rhythm, presence_session_actions, stale_session_end)
 from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist,
                               looks_randomized, names_look_real, should_use_bm_names)
 from rm_rust import (  # noqa: F401
@@ -1499,6 +1499,8 @@ def _cleanup_old(cur):
             break
     cur.execute("DELETE FROM player_sessions WHERE end_ts IS NOT NULL AND end_ts < %s", (cutoff,))
     cur.execute("DELETE FROM presence_sessions WHERE end_ts IS NOT NULL AND end_ts < %s", (cutoff,))
+    # Sicherheitsnetz: nie geschlossene Sessions duerfen die Aufbewahrungsfrist nicht umgehen
+    cur.execute("DELETE FROM presence_sessions WHERE end_ts IS NULL AND start_ts < %s", (cutoff,))
     cur.execute("DELETE FROM sessions WHERE expires_at < %s", (int(time.time()),))
     # Verwaiste Server löschen (die niemand mehr watcht und seit 7+ Tagen keine Snapshots)
     cur.execute(
@@ -1668,25 +1670,62 @@ def _notify_steam_presence(cur, steam_id: int, persona: str,
         fire_discord_webhook_async(row["discord_webhook"], embed)
 
 
+PRESENCE_STALE_SEC = PRESENCE_STALE_POLLS * PRESENCE_POLL_SEC
+
+
 def _open_presence_sessions(cur, steam_ids: list[int]) -> dict[int, dict]:
-    """Offene Presence-Session pro SteamID (id, server_addr)."""
-    cur.execute("SELECT id, steam_id, server_addr FROM presence_sessions "
+    """Offene Presence-Session pro SteamID."""
+    cur.execute("SELECT id, steam_id FROM presence_sessions "
                 "WHERE end_ts IS NULL AND steam_id = ANY(%s::bigint[])", (steam_ids,))
     return {int(r["steam_id"]): dict(r) for r in cur.fetchall()}
 
 
 def _sync_presence_session(cur, steam_id: int, open_row: dict | None,
-                           in_rust: bool, server_addr: str | None, now: int) -> None:
+                           in_rust: bool, now: int) -> None:
     """Oeffnet/schliesst presence_sessions gemaess presence_session_actions()."""
-    actions = presence_session_actions(open_row is not None,
-                                       (open_row or {}).get("server_addr"),
-                                       in_rust, server_addr)
+    actions = presence_session_actions(open_row is not None, in_rust)
     if ACTION_CLOSE in actions:
         cur.execute("UPDATE presence_sessions SET end_ts=%s WHERE id=%s",
                     (now, open_row["id"]))
     if ACTION_OPEN in actions:
-        cur.execute("INSERT INTO presence_sessions (steam_id, server_addr, start_ts) "
-                    "VALUES (%s,%s,%s)", (steam_id, server_addr, now))
+        cur.execute("INSERT INTO presence_sessions (steam_id, start_ts) VALUES (%s,%s)",
+                    (steam_id, now))
+
+
+def _sync_presence_session_safe(cur, steam_id: int, open_row: dict | None,
+                                in_rust: bool, now: int) -> None:
+    """Wie _sync_presence_session, aber ein Fehler bricht die Runde (Discord-Pings) nicht ab.
+
+    Der Savepoint haelt die gemeinsame Transaktion nach einem SQL-Fehler benutzbar.
+    """
+    try:
+        cur.execute("SAVEPOINT presence_session")
+        _sync_presence_session(cur, steam_id, open_row, in_rust, now)
+        cur.execute("RELEASE SAVEPOINT presence_session")
+    except Exception as e:
+        print(f"[presence] session sync {steam_id} fehlgeschlagen: {type(e).__name__}: {e}",
+              file=sys.stderr, flush=True)
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT presence_session")
+        except Exception as e2:
+            print(f"[presence] savepoint rollback fehlgeschlagen: {type(e2).__name__}: {e2}",
+                  file=sys.stderr, flush=True)
+
+
+def _close_stale_presence_sessions(cur, now: int) -> None:
+    """Offene Sessions ohne aktuelle Beobachtung am letzten Beobachtungszeitpunkt schliessen.
+
+    steam_presence.updated_at wird bei jedem erfolgreichen Poll gesetzt (nicht nur bei
+    Aenderung) und markiert damit die letzte Beobachtung. Fehlt die Zeile: Ende = Start.
+    """
+    cur.execute("SELECT ps.id, ps.start_ts, sp.updated_at FROM presence_sessions ps "
+                "LEFT JOIN steam_presence sp ON sp.steam_id = ps.steam_id "
+                "WHERE ps.end_ts IS NULL")
+    for row in cur.fetchall():
+        updated = None if row["updated_at"] is None else int(row["updated_at"])
+        end = stale_session_end(int(row["start_ts"]), updated, now, PRESENCE_STALE_SEC)
+        if end is not None:
+            cur.execute("UPDATE presence_sessions SET end_ts=%s WHERE id=%s", (end, row["id"]))
 
 
 def _close_untracked_presence_sessions(cur, tracked_ids: list[int], now: int) -> None:
@@ -1711,7 +1750,10 @@ def steam_presence_loop():
                 cur.execute("SELECT DISTINCT steam_id FROM watched_players "
                             "WHERE steam_id IS NOT NULL")
                 ids = [int(r["steam_id"]) for r in cur.fetchall()]
-                _close_untracked_presence_sessions(cur, ids, int(time.time()))
+                round_start = int(time.time())
+                # Vor der Verarbeitung: steam_presence.updated_at ist noch der Stand der Vorrunde
+                _close_stale_presence_sessions(cur, round_start)
+                _close_untracked_presence_sessions(cur, ids, round_start)
             if ids:
                 summaries = fetch_player_summaries(ids)
                 now = int(time.time())
@@ -1741,8 +1783,8 @@ def steam_presence_loop():
                             " in_rust=EXCLUDED.in_rust, server_addr=EXCLUDED.server_addr, "
                             " updated_at=EXCLUDED.updated_at",
                             (sid64, persona, visible, in_rust, server_addr, now))
-                        _sync_presence_session(cur, sid64, open_sessions.get(sid64),
-                                               in_rust, server_addr, now)
+                        _sync_presence_session_safe(cur, sid64, open_sessions.get(sid64),
+                                                    in_rust, now)
                         event = presence_transition(o, in_rust, server_addr)
                         if event:
                             was_addr = o.get("server_addr") if o else None

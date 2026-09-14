@@ -81,13 +81,15 @@
   </ul>
   <p>Diese Daten sind ausschliesslich Ihrem Account zugeordnet und werden
      anderen Nutzern nicht angezeigt.</p>
-  <p><strong>Online-Rhythmus:</strong> Für Spieler auf Ihrer Watchlist zeigen wir eine Heatmap
-     (7 Tage × 24 Stunden), wann sie online waren. Sie wird aus den unter 2.6 beschriebenen
-     Player-Sessions abgeleitet sowie – bei per SteamID64 hinzugefügten Spielern – aus
-     Steam-Presence-Sessions (wann diese SteamID in Rust war und auf welchem Server), die wir dafür
-     speichern. Der SteamID-Teil funktioniert nur, wenn die Spieldetails des Spielers bei Steam
-     öffentlich sind. Der Rhythmus ist ausschliesslich für Sie als Nutzer sichtbar, der diesen
-     Spieler beobachtet, nie auf öffentlichen Seiten. Die Sessions werden 14 Tage nach Ende gelöscht.</p>
+  <p><strong>Online-Rhythmus:</strong> Für jeden Spieler auf Ihrer Watchlist zeigen wir eine Heatmap
+     (7 Tage × 24 Stunden), wann dieser Spieler online war. Das gilt für jede öffentliche SteamID64 bzw.
+     jedes Steam-Profil, das Sie hinzufügen – der Spieler muss selbst kein RustMetrics-Nutzer sein.
+     Grundlage sind die unter 2.6 beschriebenen öffentlichen Player-Sessions sowie – bei per SteamID64
+     hinzugefügten Spielern – Steam-Presence-Sessions: Wir speichern dafür nur, wann diese SteamID in
+     Rust war (Beginn und Ende), <strong>nicht</strong>, auf welchem Server. Der SteamID-Teil funktioniert
+     nur, wenn die Spieldetails des Spielers bei Steam öffentlich sind. Der Rhythmus wird nur Nutzern
+     angezeigt, die diesen Spieler auf ihrer eigenen Watchlist haben, nie auf öffentlichen Seiten. Die
+     Sessions werden 14 Tage nach Ende gelöscht; nie beendete Sessions 14 Tage nach Beginn.</p>
 
   <h3>2.4 Steam-Freunde</h3>
   <p>Wenn Sie eingeloggt sind, fragen wir beim Öffnen der App über die
@@ -149,8 +151,8 @@
     <dd>14 Tage rollierend.</dd>
     <dt>Player-Session-Diffs (wer war wann auf welchem Server):</dt>
     <dd>14 Tage nach Session-Ende.</dd>
-    <dt>Steam-Presence-Sessions beobachteter SteamIDs (Online-Rhythmus):</dt>
-    <dd>14 Tage nach Session-Ende.</dd>
+    <dt>Steam-Presence-Sessions beobachteter SteamIDs (Online-Rhythmus; nur Beginn/Ende, keine Serveradresse):</dt>
+    <dd>14 Tage nach Session-Ende bzw. 14 Tage nach Beginn, falls eine Session nie beendet wurde.</dd>
     <dt>Caddy Access-Logs:</dt>
     <dd>30 Tage.</dd>
     <dt>Tageweise Zugriffsstatistik (nur aggregierte Zahlen, ohne IP-Adressen):</dt>

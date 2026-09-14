@@ -761,10 +761,12 @@
         t = stop;
       }
     }
-    return seconds.map(row => row.map(sec => Math.min(MINUTES_PER_HOUR, Math.round(sec / 60))));
+    // Echte Summe je lokaler Stunde: bei DST-Rueckstellung kann eine Zelle >60 min haben
+    return seconds.map(row => row.map(sec => Math.round(sec / 60)));
   }
 
   function rhythmLevel(minutes) {
+    minutes = Math.min(MINUTES_PER_HOUR, minutes);   // Schattierung bleibt auf 60 min gedeckelt
     if (minutes <= 0) return 0;
     const idx = RHYTHM_LEVEL_LIMITS.findIndex(limit => minutes <= limit);
     return idx === -1 ? RHYTHM_LEVEL_LIMITS.length + 1 : idx + 1;

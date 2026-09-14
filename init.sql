@@ -99,12 +99,11 @@ CREATE TABLE IF NOT EXISTS steam_presence (
     updated_at  BIGINT NOT NULL DEFAULT 0
 );
 
--- Steam-Presence-Sessions (global): wann war eine SteamID in Rust, auf welchem Server.
--- Wird bei jedem Presence-Wechsel gepflegt; Grundlage fuer den Online-Rhythmus.
+-- Steam-Presence-Sessions (global): wann war eine SteamID in Rust (bewusst OHNE Serveradresse,
+-- Datenminimierung). Wird bei jedem Presence-Wechsel gepflegt; Grundlage fuer den Online-Rhythmus.
 CREATE TABLE IF NOT EXISTS presence_sessions (
     id          BIGSERIAL PRIMARY KEY,
     steam_id    BIGINT NOT NULL,
-    server_addr TEXT,
     start_ts    BIGINT NOT NULL,
     end_ts      BIGINT
 );

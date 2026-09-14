@@ -114,7 +114,6 @@ def ensure_migrations():
             todo.append("""CREATE TABLE presence_sessions (
                    id          BIGSERIAL PRIMARY KEY,
                    steam_id    BIGINT NOT NULL,
-                   server_addr TEXT,
                    start_ts    BIGINT NOT NULL,
                    end_ts      BIGINT
                )""")

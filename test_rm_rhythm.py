@@ -5,12 +5,14 @@ import unittest
 from rm_rhythm import (
     ACTION_CLOSE,
     ACTION_OPEN,
+    PRESENCE_STALE_POLLS,
     RHYTHM_DAYS,
     RHYTHM_WINDOW_SEC,
     build_rhythm,
     clip_interval,
     merge_intervals,
     presence_session_actions,
+    stale_session_end,
 )
 
 NOW = 1_800_000_000
@@ -81,28 +83,39 @@ class BuildRhythmTest(unittest.TestCase):
 
 class PresenceSessionActionsTest(unittest.TestCase):
     def test_opens_session_when_player_enters_rust(self):
-        self.assertEqual(presence_session_actions(False, None, True, "1.2.3.4:28015"), (ACTION_OPEN,))
+        self.assertEqual(presence_session_actions(False, True), (ACTION_OPEN,))
 
     def test_closes_open_session_when_player_leaves_rust(self):
-        self.assertEqual(presence_session_actions(True, "1.2.3.4:28015", False, None), (ACTION_CLOSE,))
+        self.assertEqual(presence_session_actions(True, False), (ACTION_CLOSE,))
 
     def test_does_nothing_when_offline_without_open_session(self):
-        self.assertEqual(presence_session_actions(False, None, False, None), ())
+        self.assertEqual(presence_session_actions(False, False), ())
 
-    def test_does_nothing_while_staying_on_same_server(self):
-        # Steam liefert den Game-Port, Wechsel nur des Ports ist kein Serverwechsel.
-        self.assertEqual(presence_session_actions(True, "1.2.3.4:28015", True, "1.2.3.4:28016"), ())
+    def test_keeps_one_continuous_session_while_in_rust(self):
+        # Serverwechsel teilen die Session nicht mehr: es wird keine Adresse gespeichert.
+        self.assertEqual(presence_session_actions(True, True), ())
 
-    def test_closes_and_reopens_on_server_switch(self):
-        self.assertEqual(presence_session_actions(True, "1.2.3.4:28015", True, "5.6.7.8:28015"),
-                         (ACTION_CLOSE, ACTION_OPEN))
 
-    def test_keeps_session_when_server_address_is_unknown(self):
-        self.assertEqual(presence_session_actions(True, "1.2.3.4:28015", True, None), ())
+class StaleSessionEndTest(unittest.TestCase):
+    MAX_AGE = PRESENCE_STALE_POLLS * 60
 
-    def test_open_session_without_address_is_treated_as_open(self):
-        # Offene Session ohne bekannte Adresse (z.B. Menue/Lobby) -> nicht doppelt oeffnen.
-        self.assertEqual(presence_session_actions(True, None, True, "1.2.3.4:28015"), ())
+    def test_keeps_session_with_recent_observation(self):
+        self.assertIsNone(stale_session_end(NOW - 3600, NOW - 60, NOW, self.MAX_AGE))
+
+    def test_keeps_session_observed_exactly_at_limit(self):
+        self.assertIsNone(stale_session_end(NOW - 3600, NOW - self.MAX_AGE, NOW, self.MAX_AGE))
+
+    def test_closes_stale_session_at_last_observation(self):
+        updated = NOW - self.MAX_AGE - 1
+        self.assertEqual(stale_session_end(NOW - 7200, updated, NOW, self.MAX_AGE), updated)
+
+    def test_never_ends_before_session_start(self):
+        start = NOW - 900
+        self.assertEqual(stale_session_end(start, NOW - 7200, NOW, self.MAX_AGE), start)
+
+    def test_closes_at_start_when_no_presence_row_exists(self):
+        start = NOW - 900
+        self.assertEqual(stale_session_end(start, None, NOW, self.MAX_AGE), start)
 
 
 if __name__ == "__main__":

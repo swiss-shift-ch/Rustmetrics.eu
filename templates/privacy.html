@@ -68,12 +68,14 @@
     <li>Per server: list of player names whose online status you want to track</li>
   </ul>
   <p>This data is associated exclusively with your account and is not visible to other users.</p>
-  <p><strong>Online rhythm:</strong> for players on your watchlist we show a 7-day × 24-hour heatmap of
-     when they were online. It is derived from the player sessions described in section 2.6 and, for
-     players added by SteamID64, from Steam presence sessions (when that SteamID was in Rust and on which
-     server), which we record for this purpose. The SteamID part only works if the player's Steam game
-     details are public. The rhythm is visible only to you as the user watching that player, never on
-     public pages. Sessions are deleted 14 days after they end.</p>
+  <p><strong>Online rhythm:</strong> for every player on your watchlist we show a 7-day × 24-hour heatmap
+     of when that player was online. This applies to any public SteamID64 or Steam profile you add — the
+     player does not need to be a RustMetrics user. It is derived from the public player sessions described
+     in section 2.6 and, for players added by SteamID64, from Steam presence sessions: we record only when
+     that SteamID was in Rust (start and end time), <strong>not</strong> which server it was on. The SteamID
+     part only works if the player's Steam game details are public. The rhythm is shown only to users who
+     have that player on their own watchlist, never on public pages. Sessions are deleted 14 days after
+     they end; sessions that never ended are deleted 14 days after they started.</p>
 
   <h3>2.4 Steam friends</h3>
   <p>When you are signed in and open the app, we query your <strong>public Steam friends list</strong> and
@@ -123,8 +125,8 @@
     <dd>rolling 14 days.</dd>
     <dt>Player session diffs (who was on which server, when):</dt>
     <dd>14 days after session end.</dd>
-    <dt>Steam presence sessions for watched SteamIDs (online rhythm):</dt>
-    <dd>14 days after session end.</dd>
+    <dt>Steam presence sessions for watched SteamIDs (online rhythm; start/end time only, no server address):</dt>
+    <dd>14 days after session end, or 14 days after start if a session never ended.</dd>
     <dt>Caddy access logs:</dt>
     <dd>30 days.</dd>
     <dt>Daily traffic statistics (aggregated numbers only, no IP addresses):</dt>

@@ -18,7 +18,7 @@
   let currentTab     = "watchlist";
   let browseFetched  = false;
   let skinsFetched   = false;
-  const SKINS_ENABLED = true;  // set false to hide the Skins tab again (nav "Soon" badge in index.html)
+  const SKINS_ENABLED = false; // WIP again — nav shows "Soon", direct/saved access blocked. Flip to true to publish.
   let skinsItems     = [];   // cache of {item_id, name, slot, raw_category, prices}
   const skinsOutfit  = new Map(); // item_id -> item, preserves insertion order
   let me             = null;

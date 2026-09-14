@@ -27,6 +27,45 @@
     backpack: "back_backpack",
   };
 
+  // Dedicated, cleanly-UV'd overlay mesh per slot for real icon texturing —
+  // separate names from SLOT_MESH on purpose. Today's base_mesh.glb has none
+  // of these, so scene.getObjectByName() returns null and every slot falls
+  // straight back to the plain tint on SLOT_MESH, unchanged. Once
+  // base_mesh.blend adds one of these per slot (see assets/playermodel/
+  // SOURCE.md — clean non-overlapping UV, sized for one square item icon),
+  // it lights up automatically with no further code changes.
+  const SLOT_TEXTURE_MESH = {
+    hoodie:   "skin_hoodie",
+    pants:    "skin_pants",
+    boots:    "skin_boots",
+    mask:     "skin_mask",
+    hat:      "skin_hat",
+    backpack: "skin_backpack",
+  };
+
+  // Body meshes to hide (clipping-prevention) once a slot is filled — same
+  // "doesn't exist yet, safe no-op" story as SLOT_TEXTURE_MESH.
+  const SLOT_HIDE_MESHES = {
+    hoodie:   ["arms_shoulders_hands", "torso_tshirt"],
+    pants:    ["legs_upper_lower", "underwear"],
+    boots:    ["feet"],
+    mask:     [],
+    hat:      [],
+    backpack: [],
+  };
+
+  const textureLoader = typeof THREE !== "undefined" ? new THREE.TextureLoader() : null;
+  const textureCache = new Map(); // image_url -> THREE.Texture
+
+  function loadIconTexture(url) {
+    if (!textureLoader || !url) return null;
+    if (textureCache.has(url)) return textureCache.get(url);
+    const tex = textureLoader.load(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    textureCache.set(url, tex);
+    return tex;
+  }
+
   const COLOR_EMPTY  = 0x555555; // slot not equipped
   const COLOR_FILLED = 0xe85a3e; // var(--accent-bright) — slot has an item
   const COLOR_SKIN   = 0xc79b74; // body_skin, not an outfit slot
@@ -39,22 +78,44 @@
   let scene = null;
   let camera = null;
   let controls = null;
-  let slotMeshes = {};   // slot name -> THREE.Mesh
+  let slotMeshes = {};      // slot name -> THREE.Mesh (plain tint, always present today)
+  let textureMeshes = {};   // slot name -> THREE.Mesh (dedicated UV overlay, future-only)
   let ready = false;
   let pendingOutfit = null;
 
-  function applySlotState(slot, isFilled) {
-    const mesh = slotMeshes[slot];
-    if (!mesh || !mesh.material) return;
-    mesh.material.color.setHex(isFilled ? COLOR_FILLED : COLOR_EMPTY);
-    mesh.material.emissive?.setHex(isFilled ? COLOR_FILLED : 0x000000);
-    mesh.material.emissiveIntensity = isFilled ? 0.15 : 0;
+  function applySlotState(slot, item) {
+    const isFilled = Boolean(item);
+    const tintMesh = slotMeshes[slot];
+    const texMesh = textureMeshes[slot];
+    const tex = texMesh && isFilled ? loadIconTexture(item.image_url) : null;
+    const showTex = Boolean(tex);
+
+    if (tintMesh && tintMesh.material) {
+      tintMesh.visible = !showTex;
+      tintMesh.material.color.setHex(isFilled ? COLOR_FILLED : COLOR_EMPTY);
+      tintMesh.material.emissive?.setHex(isFilled ? COLOR_FILLED : 0x000000);
+      tintMesh.material.emissiveIntensity = isFilled ? 0.15 : 0;
+    }
+
+    if (texMesh) {
+      texMesh.visible = showTex;
+      if (showTex && texMesh.material) {
+        texMesh.material.map = tex;
+        texMesh.material.color.setHex(0xffffff);
+        texMesh.material.needsUpdate = true;
+      }
+    }
+
+    for (const name of SLOT_HIDE_MESHES[slot] || []) {
+      const hideMesh = scene?.getObjectByName(name);
+      if (hideMesh) hideMesh.visible = !isFilled;
+    }
   }
 
   function setOutfit(outfitBySlot) {
     if (!ready) { pendingOutfit = outfitBySlot; return; }
     for (const slot of Object.keys(SLOT_MESH)) {
-      applySlotState(slot, Boolean(outfitBySlot && outfitBySlot[slot]));
+      applySlotState(slot, outfitBySlot && outfitBySlot[slot]);
     }
   }
 
@@ -113,10 +174,14 @@
       (gltf) => {
         scene.add(gltf.scene);
         slotMeshes = {};
+        textureMeshes = {};
         gltf.scene.traverse((obj) => {
           if (!obj.isMesh) return;
           for (const [slot, meshName] of Object.entries(SLOT_MESH)) {
             if (obj.name === meshName) slotMeshes[slot] = obj;
+          }
+          for (const [slot, meshName] of Object.entries(SLOT_TEXTURE_MESH)) {
+            if (obj.name === meshName) { textureMeshes[slot] = obj; obj.visible = false; }
           }
           if (obj.name === "body_skin" && obj.material) {
             obj.material.color.setHex(COLOR_SKIN);

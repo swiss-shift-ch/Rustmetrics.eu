@@ -40,3 +40,26 @@
   not attempted here. Real icons are shown as flat 2D thumbnails in the
   Skin Checker's item/outfit lists instead (`static/app.js`), where they
   render correctly with no UV involved.
+
+- **Planned: hand-unwrapped texture overlay meshes (2026-09-14, not yet built).**
+  `static/skin-viewer.js` already has the consumer side of this wired up and
+  waiting — it's a safe no-op against today's GLB (verified: none of the
+  mesh names below exist yet, so every slot falls straight back to the
+  plain tint, unchanged). To light it up, add to `base_mesh.blend`, per slot:
+  1. One additional mesh named `skin_<slot>` (`skin_hoodie`, `skin_pants`,
+     `skin_boots`, `skin_mask`, `skin_hat`, `skin_backpack`) — geometry can
+     reuse/duplicate the existing `body_<slot>`/`head_<slot>` shape, but
+     **hand-unwrap its UVs** (seams placed so the whole mesh maps to one
+     contiguous, non-overlapping square region of UV space) so a single
+     square item-icon texture wraps it coherently instead of fragmenting.
+  2. Keep the old `body_hoodie`/`body_pants`/etc. meshes as-is (the tint
+     fallback still uses them for slots with no `skin_*` counterpart, and
+     `skin-viewer.js` auto-hides the old mesh whenever the new one is
+     showing a texture, so they never render on top of each other).
+  3. Add the clipping-prevention meshes `skin-viewer.js` already looks for:
+     `arms_shoulders_hands`, `torso_tshirt` (hidden when `hoodie` filled),
+     `legs_upper_lower`, `underwear` (hidden when `pants` filled), `feet`
+     (hidden when `boots` filled) — optional polish, no-op if absent.
+  4. Re-export to `static/playermodel/base_mesh.glb`, same as before.
+  No code changes needed on export — `SLOT_TEXTURE_MESH`/`SLOT_HIDE_MESHES`
+  in `static/skin-viewer.js` already list these exact names.

@@ -18,6 +18,7 @@
   let currentTab     = "watchlist";
   let browseFetched  = false;
   let skinsFetched   = false;
+  const SKINS_ENABLED = false; // Skin Checker WIP — nav shows "Soon", block direct/saved access too
   let skinsItems     = [];   // cache of {item_id, name, slot, raw_category, prices}
   const skinsOutfit  = new Map(); // item_id -> item, preserves insertion order
   let me             = null;
@@ -169,6 +170,7 @@
 
   function switchTab(name, historyMode = "push") {
     if (!name) return;
+    if (name === "skins" && !SKINS_ENABLED) name = "watchlist";
     currentTab = name;
     els.navItems.forEach(t => t.classList.toggle("is-active", t.dataset.tab === name));
     els.views.forEach(v => {

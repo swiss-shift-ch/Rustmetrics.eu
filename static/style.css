@@ -238,6 +238,33 @@ a:hover { color: var(--accent); text-decoration: underline; }
   padding-top: 10px; padding-bottom: 10px;
 }
 
+.nav-item.is-disabled {
+  color: var(--text-dim);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.nav-item.is-disabled:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+.nav-item.is-disabled .nav-icon,
+.nav-item.is-disabled:hover .nav-icon {
+  color: var(--text-dim);
+}
+.nav-soon {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  padding: 2px 5px;
+  line-height: 1.4;
+}
+
 /* ─── Views ────────────────────────────────────────────────────────── */
 .view { display: none; padding: 28px 32px; max-width: 1400px; }
 .view.is-active { display: block; }

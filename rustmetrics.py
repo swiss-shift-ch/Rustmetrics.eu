@@ -2798,13 +2798,23 @@ def skins_price_loop():
 
 
 def api_skins_items() -> dict:
-    """Liest Items+Preise ausschliesslich aus der eigenen DB (kein Live-Call)."""
+    """Liest Items+Preise ausschliesslich aus der eigenen DB (kein Live-Call).
+
+    skin_items enthaelt den kompletten Skinport-Katalog (~5000+ Items ueber
+    alle Rust-Kategorien: weapon, misc, resource, clothing, ...) — siehe
+    rm_skins.refresh_skin_prices(). Nur ein kuratierter Bruchteil davon hat
+    einen slot (rm_skin_slots.SLOT_MAP) und ist damit ueberhaupt ein reales
+    Outfit-Wearable. Der Outfit Builder ist kein allgemeiner Preisvergleich
+    fuer den ganzen Katalog, also WHERE slot IS NOT NULL — sonst ertrinkt
+    die Liste in tausenden Waffen-/Deployable-Skins ohne Icon.
+    """
     with _Conn() as (conn, cur):
         cur.execute("""
             SELECT i.item_id, i.name, i.slot, i.raw_category, i.image_url,
                    p.platform, p.price, p.currency, p.url, p.quantity, p.updated_at
             FROM skin_items i
             LEFT JOIN skin_prices p ON p.item_id = i.item_id
+            WHERE i.slot IS NOT NULL
             ORDER BY i.name
         """)
         rows = cur.fetchall()

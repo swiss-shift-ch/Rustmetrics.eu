@@ -154,10 +154,10 @@
     const img = await window.SkinIconTexture.loadIcon(item.image_url);
     if (slotToken[slot] !== token) return; // slot changed while loading
     if (!img) return;                      // no icon → plain tint stays
-    const tint = window.SkinIconTexture.dominantColor(img);
-    const tintCss = `#${tint.clone().convertLinearToSRGB().getHexString()}`;
-    shell.material.color.copy(tint);
-    shell.material.map = window.SkinIconTexture.buildTexture(img, tintCss, SLOT_SHELLS[slot].print);
+    // Colour-only: tint the garment with the icon's dominant colour. A 2D
+    // product icon printed onto a 3D shell reads as a cheap sticker (worst on
+    // the mask), so we don't map it — the real icon is shown in the item list.
+    shell.material.color.copy(window.SkinIconTexture.dominantColor(img));
     shell.material.needsUpdate = true;
   }
 

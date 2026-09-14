@@ -83,8 +83,17 @@ class NameSourceTest(unittest.TestCase):
         self.assertFalse(should_use_bm_names(REAL_LOWERCASE_NAMES, REAL_LOWERCASE_NAMES))
 
     def test_needs_enough_battlemetrics_names_to_judge(self):
-        self.assertFalse(should_use_bm_names(FAKE_NAMES_SMALL, REAL_NAMES_SMALL[:3]))
+        self.assertFalse(should_use_bm_names(FAKE_NAMES_SMALL, REAL_NAMES_SMALL[:2]))
         self.assertFalse(should_use_bm_names([], []))
+
+    def test_low_pop_server_with_enough_names_still_gets_judged(self):
+        # Regression: a 4-player server (below the old sample-size gate) whose A2S
+        # names are randomized must still get corrected once BM has real names for
+        # it — poll_server_row() always BM-checks low-pop servers now, so this only
+        # needs MIN_COMPARE_NAMES to accept a small-but-nonzero sample.
+        fake = POOL[:4]
+        real = REAL_NAMES_SMALL[:4]
+        self.assertTrue(should_use_bm_names(fake, real))
 
     def test_looks_randomized_and_names_look_real(self):
         self.assertTrue(looks_randomized(FAKE_NAMES_SMALL))
@@ -92,7 +101,8 @@ class NameSourceTest(unittest.TestCase):
         self.assertFalse(looks_randomized(["gena", "otis"]))
         self.assertTrue(names_look_real(REAL_NAMES_SMALL))
         self.assertFalse(names_look_real(FAKE_NAMES_SMALL))
-        self.assertFalse(names_look_real(REAL_NAMES_SMALL[:3]))
+        self.assertFalse(names_look_real(REAL_NAMES_SMALL[:2]))
+        self.assertTrue(names_look_real(REAL_NAMES_SMALL[:3]))
 
 
 class _FakeA2SServer:

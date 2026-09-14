@@ -54,7 +54,8 @@ from rm_a2s import query_a2s  # noqa: F401
 from rm_rhythm import (ACTION_CLOSE, ACTION_OPEN, PRESENCE_STALE_POLLS, RHYTHM_WINDOW_SEC,
                        build_rhythm, presence_session_actions, stale_session_end)
 from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist,
-                              looks_randomized, names_look_real, should_use_bm_names)
+                              looks_randomized, names_look_real, should_use_bm_names,
+                              LOW_POP_ALWAYS_BM_CHECK)
 from rm_rust import (  # noqa: F401
     parse_rust_keywords, detect_rust_tier, detect_rust_category,
     detect_rust_region, detect_rust_group_limit, detect_name_anonymization,
@@ -1369,10 +1370,14 @@ def poll_server_row(row: dict) -> dict:
     # wenn A2S nicht das volle Bild liefert.
     a2s_has_pop     = q.get("players_count") is not None and q.get("max_players") is not None
     a2s_has_players = bool(q.get("players_list"))
+    # Randomization heuristics need a sample size a low-pop server's whole player
+    # list often can't reach — cross-check those against BM unconditionally instead
+    # of waiting for looks_randomized() to trigger (see rm_a2s_blocklist.py).
+    a2s_low_pop = a2s_has_pop and q.get("players_count") <= LOW_POP_ALWAYS_BM_CHECK
     bm_attrs = None
     bm_pairs: list[tuple[int, str]] = []
     used_bm_names = False
-    if not a2s_has_pop or not a2s_has_players or looks_randomized(a2s_names):
+    if not a2s_has_pop or not a2s_has_players or looks_randomized(a2s_names) or a2s_low_pop:
         try:
             bm_attrs, bm_pairs = query_bm_server(row["host"], row["port"])
         except Exception as e:
@@ -1889,6 +1894,15 @@ def _latest_snapshot(cur, server_id: int):
     return snap
 
 
+def _names_look_anonymized_for_display(is_anon_flag: bool, names: list[str]) -> bool:
+    """detect_name_anonymization() needs >=15 names + >=3 dupes — never fires on a
+    low-pop server's whole player list. looks_randomized()'s ratio check (>=3 names,
+    see rm_a2s_blocklist.MIN_COMPARE_NAMES) covers exactly that gap, so a small server
+    with clearly pool-style names still gets the "names randomized" warning even when
+    BattleMetrics has no data to actually replace them with."""
+    return bool(is_anon_flag) or detect_name_anonymization(names) or looks_randomized(names)
+
+
 def api_servers_list(user_id: int) -> list[dict]:
     """Liste der Server, die DIESER User beobachtet, mit aktuellem Snapshot
        und seinen beobachteten Spielernamen pro Server."""
@@ -1968,7 +1982,7 @@ def api_servers_list(user_id: int) -> list[dict]:
                 "max_group": detect_rust_group_limit(
                     (snap.get("name") if snap else None) or r["name"], parsed.get("tags", [])),
                 "watched_players": watched,
-                "name_anonymized": bool(r.get("is_anonymized")) or detect_name_anonymization(players),
+                "name_anonymized": _names_look_anonymized_for_display(r.get("is_anonymized"), players),
                 "via_battlemetrics": _served_by_battlemetrics(r["host"], r["port"]),
             })
     return out
@@ -2021,7 +2035,7 @@ def api_server_detail(user_id: int, server_id: int, hours: int = 24) -> dict | N
             "keywords_raw": kw_raw, "keywords_parsed": parsed,
             "tier": detect_rust_tier(snap.get("name") if snap else r["name"], parsed.get("tags", [])),
             "wipe": next_wipe_estimate(parsed.get("born_ts")),
-            "name_anonymized": bool(r.get("is_anonymized")) or detect_name_anonymization(players_list),
+            "name_anonymized": _names_look_anonymized_for_display(r.get("is_anonymized"), players_list),
             "alias_map": alias_map,
         }
 
@@ -2575,8 +2589,11 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
     </a>
   </div>
   <div class="topbar-actions" style="margin-left:auto;">
-    <a class="btn-steam" href="/auth/steam/login" style="text-decoration:none;">
+    <a class="btn-steam" href="/auth/steam/login" data-anon-only style="text-decoration:none;">
       <span class="steam-icon" aria-hidden="true">⌬</span> Sign in to watch
+    </a>
+    <a class="btn-ghost" href="/app" data-auth-only style="text-decoration:none; display:none;">
+      ← My watchlist
     </a>
   </div>
 </header>
@@ -2614,7 +2631,7 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
     </p>
   </section>
 
-  <p style="text-align:center; margin-top:30px; color:var(--text-muted); font-size:13px;">
+  <p data-anon-only style="text-align:center; margin-top:30px; color:var(--text-muted); font-size:13px;">
     Want a private watchlist with online/offline notifications for specific players?
     <a href="/auth/steam/login" style="color:var(--accent-bright); font-weight:600;">Sign in with Steam</a> — free, no email required.
   </p>
@@ -2630,6 +2647,7 @@ def render_public_server_page(host: str, port: int) -> tuple[str, int]:
   <a href="https://github.com/swiss-shift-ch/rustmetrics" target="_blank" rel="noopener" title="Source on GitHub">GitHub ★</a>
 </footer>
 
+<script src="/player-page.js?v=20260517f"></script>
 </body></html>"""
     return html, 200
 

@@ -11,9 +11,14 @@ MODE_PLAYERS = "players"
 MODE_ANON = "anonymized"
 PLAYER_LIST_FROM_BM_MODES = (MODE_PLAYERS, MODE_ANON)
 
-MIN_COMPARE_NAMES = 5
+MIN_COMPARE_NAMES = 3  # low enough that low-pop servers (poller always BM-checks those) still get compared
 POOL_NAME_RATIO = 0.70
 MAX_SHARED_NAME_RATIO = 0.10
+
+# detect_name_anonymization()/looks_randomized()'s sample-size gates never fire on a
+# small server's full player list — poll_server_row() always cross-checks against
+# BattleMetrics below this population instead of waiting for the heuristic to trigger.
+LOW_POP_ALWAYS_BM_CHECK = 10
 
 
 def looks_randomized(names: list[str]) -> bool:

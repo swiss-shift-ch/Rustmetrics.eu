@@ -1343,6 +1343,25 @@ a.player-name.plink:hover {
 }
 .btn-icon:hover { color: var(--text); border-color: var(--text-dim); }
 .btn-icon.is-active { color: var(--accent-bright); border-color: var(--accent); background: var(--accent-bg); }
+.skins-viewer-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.skins-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+.skins-legend-swatch:first-of-type { margin-left: 0; }
+.skins-legend-filled { background: var(--accent-bright); }
+.skins-legend-empty { background: #555555; }
 .skins-viewer-hint {
   position: absolute;
   left: 0; right: 0; bottom: 0;

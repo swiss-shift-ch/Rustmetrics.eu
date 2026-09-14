@@ -53,7 +53,7 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260914a" />
+<link rel="stylesheet" href="/style.css?v=20260914b" />
 </head>
 <body>
 
@@ -96,6 +96,10 @@
     <button class="nav-item" data-tab="mystats" aria-label="My stats" title="My stats">
       <span class="nav-icon" aria-hidden="true">◆</span>
       <span class="nav-label">My Stats</span>
+    </button>
+    <button class="nav-item" data-tab="skins" aria-label="Skin Checker" title="Skin Checker">
+      <span class="nav-icon" aria-hidden="true">👕</span>
+      <span class="nav-label">Skins</span>
     </button>
     <button class="nav-item" data-tab="play" title="Mini-game — Rust Flap" aria-label="Play Rust Flap">
       <span class="nav-icon" aria-hidden="true">▶</span>
@@ -291,6 +295,39 @@
       </div>
     </section>
 
+    <!-- ── Skin Checker View — Outfit-Zusammenstellung + Preisvergleich ── -->
+    <section class="view view-skins" data-view="skins" hidden>
+      <header class="view-header">
+        <h2 class="view-title">Skin Checker</h2>
+        <p class="view-sub">Pick real Rust skins and compare prices across marketplaces. The 3D outfit
+          preview is still in the works — for now, prices only.</p>
+      </header>
+
+      <div class="skins-layout">
+        <div class="skins-picker">
+          <input id="skins-search" type="search" placeholder="Search items…" class="skins-search" />
+          <div id="skins-item-list" class="skins-item-list">
+            <div class="hint" style="padding:16px; text-align:center;">Loading items…</div>
+          </div>
+        </div>
+
+        <aside class="skins-outfit">
+          <h3>Your outfit <span id="skins-outfit-count" class="hint">(0)</span></h3>
+          <div id="skins-outfit-list" class="skins-outfit-list">
+            <p class="hint" style="padding:12px 0;">No items picked yet — click an item on the left to add it.</p>
+          </div>
+          <div class="skins-outfit-total">
+            <span>Total (cheapest per item)</span>
+            <strong id="skins-outfit-total">€0.00</strong>
+          </div>
+          <p class="hint" style="font-size:11px; margin-top:8px;">
+            Prices are cached from our own database (refreshed hourly), never fetched live per page view.
+            Currently sourced from Skinport only — more marketplaces are being added.
+          </p>
+        </aside>
+      </div>
+    </section>
+
     <!-- ── My Stats View — eingeloggter User sieht eigene Rust-Lifetime-Stats ── -->
     <section class="view view-mystats" data-view="mystats" hidden>
       <header class="view-header">
@@ -458,6 +495,6 @@
   <span id="footer-ts">—</span>
 </footer>
 
-<script src="/app.js?v=20260914a"></script>
+<script src="/app.js?v=20260914b"></script>
 </body>
 </html>

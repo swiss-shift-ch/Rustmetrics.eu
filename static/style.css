@@ -1261,6 +1261,68 @@ a.player-name.plink:hover {
 .session-list .sess .sstart { color: var(--text-dim); font-size: 11px; }
 .session-list .sess .sdur { color: var(--hazmat); font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
+/* ─── Skin Checker view ──────────────────────────────────────────────── */
+.skins-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .skins-layout { grid-template-columns: 1fr; }
+}
+.skins-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+.skins-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.skins-item-row, .skins-outfit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-table-row);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.skins-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.skins-item-name { color: var(--text); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skins-item-meta { color: var(--text-dim); font-size: 11px; }
+.skins-outfit {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.skins-outfit h3 { margin: 0 0 10px 0; font-size: 13px; color: var(--text); }
+.skins-outfit-list { display: flex; flex-direction: column; gap: 6px; }
+.skins-outfit-row .skins-item-name { max-width: 140px; }
+.skins-outfit-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+}
+.skins-outfit-total strong { color: var(--accent-bright); font-size: 16px; }
+
 /* ─── Footer ────────────────────────────────────────────────────────── */
 .footer {
   text-align: center;

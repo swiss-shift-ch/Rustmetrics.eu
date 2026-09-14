@@ -17,6 +17,9 @@
   let detailTimer    = null;
   let currentTab     = "watchlist";
   let browseFetched  = false;
+  let skinsFetched   = false;
+  let skinsItems     = [];   // cache of {item_id, name, slot, raw_category, prices}
+  const skinsOutfit  = new Map(); // item_id -> item, preserves insertion order
   let me             = null;
   let friendsCache   = [];
   // Sort state for detail-drawer player lists (persists across auto-refresh)
@@ -91,6 +94,11 @@
     friendsList:    $("#friends-list"),
     friendsCount:   $("#friends-count"),
     friendsRefresh: $("#friends-refresh"),
+    skinsSearch:    $("#skins-search"),
+    skinsItemList:  $("#skins-item-list"),
+    skinsOutfitList:  $("#skins-outfit-list"),
+    skinsOutfitCount: $("#skins-outfit-count"),
+    skinsOutfitTotal: $("#skins-outfit-total"),
   };
 
   const fmt = {
@@ -136,9 +144,12 @@
   // Nur der Server-Browser hat eine eigene URL (/browser, serverseitig vorgerendert).
   const HOME_TITLE = "RustMetrics — Rust Server & Player Tracker";
   const TAB_PATHS  = { browse: "/browser" };
-  const TAB_TITLES = { browse: "Rust Server Browser — Live Pop, Wipes & Filters | RustMetrics" };
+  const TAB_TITLES = {
+    browse: "Rust Server Browser — Live Pop, Wipes & Filters | RustMetrics",
+    skins:  "Rust Skin Checker — Outfit Builder & Price Compare | RustMetrics",
+  };
   const PATH_TABS  = { "/browser": "browse", "/browser/": "browse" };
-  const VALID_TABS = ["browse", "watchlist", "about", "settings", "mystats", "play"];
+  const VALID_TABS = ["browse", "watchlist", "about", "settings", "mystats", "play", "skins"];
 
   function syncUrl(name, historyMode) {
     document.title = TAB_TITLES[name] || HOME_TITLE;
@@ -167,6 +178,10 @@
     }
     if (name === "play") {
       loadPlayLeaderboard();
+    }
+    if (name === "skins" && !skinsFetched) {
+      skinsFetched = true;
+      loadSkinItems();
     }
     syncUrl(name, historyMode);
     try { localStorage.setItem(LS_PREFIX + "tab", name); } catch (e) {}
@@ -1682,6 +1697,103 @@
         }
       } catch (err) { /* silently ignore — game continues */ }
     }
+  });
+
+  // ─── Skin Checker ───────────────────────────────────────────────────
+  function cheapestPrice(item) {
+    const priced = (item.prices || []).filter(p => p.price != null);
+    if (!priced.length) return null;
+    return priced.reduce((a, b) => (b.price < a.price ? b : a));
+  }
+
+  function renderSkinItemList(filterText = "") {
+    if (!els.skinsItemList) return;
+    const q = filterText.trim().toLowerCase();
+    const matches = q
+      ? skinsItems.filter(it => it.name.toLowerCase().includes(q))
+      : skinsItems;
+    if (!matches.length) {
+      els.skinsItemList.innerHTML = '<div class="hint" style="padding:16px; text-align:center;">No items found.</div>';
+      return;
+    }
+    els.skinsItemList.innerHTML = matches.slice(0, 200).map(it => {
+      const cheapest = cheapestPrice(it);
+      const priceLabel = cheapest ? `${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)}` : "no price yet";
+      const inOutfit = skinsOutfit.has(it.item_id);
+      return `
+        <div class="skins-item-row" data-item-id="${fmt.escape(it.item_id)}">
+          <div class="skins-item-info">
+            <span class="skins-item-name">${fmt.escape(it.name)}</span>
+            <span class="skins-item-meta">${fmt.escape(it.raw_category || "uncategorized")} · ${priceLabel}</span>
+          </div>
+          <button type="button" class="btn-ghost skins-item-add" ${inOutfit ? "disabled" : ""}>
+            ${inOutfit ? "Added" : "+ Add"}
+          </button>
+        </div>`;
+    }).join("");
+  }
+
+  function renderOutfit() {
+    if (!els.skinsOutfitList) return;
+    const items = Array.from(skinsOutfit.values());
+    els.skinsOutfitCount.textContent = `(${items.length})`;
+    if (!items.length) {
+      els.skinsOutfitList.innerHTML = '<p class="hint" style="padding:12px 0;">No items picked yet — click an item on the left to add it.</p>';
+      els.skinsOutfitTotal.textContent = "€0.00";
+      return;
+    }
+    let total = 0;
+    els.skinsOutfitList.innerHTML = items.map(it => {
+      const cheapest = cheapestPrice(it);
+      if (cheapest) total += cheapest.price;
+      const priceLabel = cheapest
+        ? `<a href="${fmt.escape(cheapest.url || '#')}" target="_blank" rel="noopener noreferrer">${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)} (${fmt.escape(cheapest.platform)})</a>`
+        : "no price yet";
+      return `
+        <div class="skins-outfit-row" data-item-id="${fmt.escape(it.item_id)}">
+          <span class="skins-item-name">${fmt.escape(it.name)}</span>
+          <span class="skins-item-meta">${priceLabel}</span>
+          <button type="button" class="btn-ghost skins-item-remove" title="Remove">✕</button>
+        </div>`;
+    }).join("");
+    els.skinsOutfitTotal.textContent = `€${total.toFixed(2)}`;
+  }
+
+  async function loadSkinItems() {
+    if (!els.skinsItemList) return;
+    try {
+      const data = await api("/api/skins/items");
+      skinsItems = data.items || [];
+      renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
+    } catch (e) {
+      els.skinsItemList.innerHTML =
+        '<div class="hint" style="padding:16px; text-align:center; color:var(--red);">Couldn\'t load items.</div>';
+    }
+  }
+
+  els.skinsSearch?.addEventListener("input", () => renderSkinItemList(els.skinsSearch.value));
+
+  els.skinsItemList?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".skins-item-add");
+    if (!btn) return;
+    const row = e.target.closest(".skins-item-row");
+    const itemId = row?.dataset.itemId;
+    const item = skinsItems.find(it => it.item_id === itemId);
+    if (!item || skinsOutfit.has(itemId)) return;
+    skinsOutfit.set(itemId, item);
+    renderOutfit();
+    renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
+  });
+
+  els.skinsOutfitList?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".skins-item-remove");
+    if (!btn) return;
+    const row = e.target.closest(".skins-outfit-row");
+    const itemId = row?.dataset.itemId;
+    if (!itemId) return;
+    skinsOutfit.delete(itemId);
+    renderOutfit();
+    renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
   });
 
   // ─── Cookie banner ────────────────────────────────────────────────────

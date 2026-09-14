@@ -6,9 +6,8 @@ Namen — jedes hier gelistete Item ist ein tatsaechliches Vanilla-Kleidungs-
 hoodie | chest | pants | kilt | boots | mask | hat | backpack
 
 Bewusst manuell und klein gehalten (siehe Bau-Auftrag Abschnitt 2 und die
-Diskussion dazu): wir uebernehmen KEINE Slot-Datenbank von Drittseiten
-(rusthelp.com/rustmaps.com), sondern pflegen das hier selbst, Item fuer
-Item, erweiterbar bei Bedarf.
+Diskussion dazu): wir uebernehmen KEINE Slot-Datenbank von Drittseiten,
+sondern pflegen das hier selbst, Item fuer Item, erweiterbar bei Bedarf.
 
 Die Skinport-API selbst liefert nur grobe Kategorien (weapon, misc,
 clothing, armor, resource) — das reicht nicht fuer unsere sechs Slots,

@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover - nur relevant wenn Dependency fehlt
     brotli = None
 
 from rm_config import _env
+from rm_skin_slots import slot_for_name
 
 STEAM_APPID = 252490  # Rust auf Steam
 SKINPORT_API = "https://api.skinport.com/v1/items"
@@ -130,14 +131,16 @@ def refresh_skin_prices(conn_ctx) -> int:
         for row in rows:
             # skin_items: neue Items anlegen, bestehende NICHT ueberschreiben
             # bei slot/image_url/texture_ref (das ist kuratiert von Hand).
+            slot = slot_for_name(row["name"])
             cur.execute(
                 """
-                INSERT INTO skin_items (item_id, name, raw_category, created_at)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO skin_items (item_id, name, raw_category, slot, created_at)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (item_id) DO UPDATE
-                    SET raw_category = COALESCE(skin_items.raw_category, EXCLUDED.raw_category)
+                    SET raw_category = COALESCE(skin_items.raw_category, EXCLUDED.raw_category),
+                        slot         = COALESCE(skin_items.slot, EXCLUDED.slot)
                 """,
-                (row["item_id"], row["name"], row["raw_category"], now),
+                (row["item_id"], row["name"], row["raw_category"], slot, now),
             )
             cur.execute(
                 """

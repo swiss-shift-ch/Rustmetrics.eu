@@ -2,3 +2,5 @@ psycopg2-binary>=2.9,<3.0
 # RCON-Integration (V1): WebRCON-WebSocket-Client + Fernet-Encryption für Owner-Credentials
 websockets>=12.0,<14.0
 cryptography>=42.0,<46.0
+# Skin-Checker: Skinport-API liefert nur Brotli-komprimierte Responses
+brotli>=1.1,<2.0

@@ -233,3 +233,26 @@ CREATE TABLE IF NOT EXISTS rust_player_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_rust_stats_fetched ON rust_player_stats(fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rust_stats_kills   ON rust_player_stats(kill_player DESC NULLS LAST);
+
+-- Skin-Checker: Item-Stammdaten + gecachte Preise pro Marktplatz.
+-- slot/image_url/texture_ref werden manuell kuratiert, nicht automatisch
+-- befuellt (siehe Bau-Auftrag Abschnitt 2).
+CREATE TABLE IF NOT EXISTS skin_items (
+    item_id      TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    slot         TEXT,
+    raw_category TEXT,
+    image_url    TEXT,
+    texture_ref  TEXT,
+    created_at   BIGINT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS skin_prices (
+    item_id    TEXT NOT NULL REFERENCES skin_items(item_id) ON DELETE CASCADE,
+    platform   TEXT NOT NULL,
+    price      NUMERIC,
+    currency   TEXT,
+    url        TEXT,
+    quantity   INTEGER,
+    updated_at BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (item_id, platform)
+);

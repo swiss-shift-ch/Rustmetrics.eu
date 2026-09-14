@@ -64,6 +64,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
+from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC
 
 
 _bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False, "paused_until": 0.0}
@@ -2777,6 +2778,58 @@ def traffic_history_loop():
         _traffic_ingest_stop.wait(900)
 
 
+_skins_price_stop = threading.Event()
+
+
+def skins_price_loop():
+    """Holt Skin-Preise 1x/Stunde und schreibt sie in die eigene DB.
+
+    Frontend/API fragen NIE live gegen Skinport/Steam — siehe Bau-Auftrag
+    Abschnitt 4 ("Muss gecached werden").
+    """
+    print("[skins-price] gestartet", flush=True)
+    while not _skins_price_stop.is_set():
+        try:
+            n = refresh_skin_prices(_Conn)
+            print(f"[skins-price] {n} Item(s) aktualisiert", flush=True)
+        except Exception as e:
+            print(f"[skins-price] WARN: {type(e).__name__}: {e}", flush=True)
+        _skins_price_stop.wait(SKINPORT_MIN_INTERVAL_SEC)
+
+
+def api_skins_items() -> dict:
+    """Liest Items+Preise ausschliesslich aus der eigenen DB (kein Live-Call)."""
+    with _Conn() as (conn, cur):
+        cur.execute("""
+            SELECT i.item_id, i.name, i.slot, i.raw_category, i.image_url,
+                   p.platform, p.price, p.currency, p.url, p.quantity, p.updated_at
+            FROM skin_items i
+            LEFT JOIN skin_prices p ON p.item_id = i.item_id
+            ORDER BY i.name
+        """)
+        rows = cur.fetchall()
+    items: dict[str, dict] = {}
+    for r in rows:
+        item = items.setdefault(r["item_id"], {
+            "item_id": r["item_id"],
+            "name": r["name"],
+            "slot": r["slot"],
+            "raw_category": r["raw_category"],
+            "image_url": r["image_url"],
+            "prices": [],
+        })
+        if r["platform"]:
+            item["prices"].append({
+                "platform": r["platform"],
+                "price": float(r["price"]) if r["price"] is not None else None,
+                "currency": r["currency"],
+                "url": r["url"],
+                "quantity": r["quantity"],
+                "updated_at": r["updated_at"],
+            })
+    return {"items": list(items.values())}
+
+
 def parse_caddy_log_tail(path: str = None, max_bytes: int = None) -> dict:
     """
     Liest die letzten max_bytes des Caddy-Access-Logs und extrahiert:
@@ -3930,6 +3983,11 @@ class Handler(SimpleHTTPRequestHandler):
         # API
         if u.path == "/api/ping": return self._json({"ok": True, "ts": int(time.time())})
         if u.path == "/api/me":   return self._api_me()
+        if u.path == "/api/skins/items":
+            try:
+                return self._json(api_skins_items())
+            except Exception as e:
+                return self._fail(e, "skins")
         if u.path == "/api/servers":
             sess = self._read_session()
             if not sess: return self._json({"error": "auth required"}, 401)
@@ -4511,6 +4569,8 @@ def main():
     tw.start()
     th = threading.Thread(target=traffic_history_loop, daemon=True)
     th.start()
+    tsk = threading.Thread(target=skins_price_loop, daemon=True)
+    tsk.start()
 
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     httpd.daemon_threads = True

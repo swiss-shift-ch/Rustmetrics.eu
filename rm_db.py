@@ -117,6 +117,27 @@ def ensure_migrations():
                    start_ts    BIGINT NOT NULL,
                    end_ts      BIGINT
                )""")
+        if not _table_exists(cur, "skin_items"):
+            todo.append("""CREATE TABLE skin_items (
+                   item_id      TEXT PRIMARY KEY,
+                   name         TEXT NOT NULL,
+                   slot         TEXT,
+                   raw_category TEXT,
+                   image_url    TEXT,
+                   texture_ref  TEXT,
+                   created_at   BIGINT NOT NULL DEFAULT 0
+               )""")
+        if not _table_exists(cur, "skin_prices"):
+            todo.append("""CREATE TABLE skin_prices (
+                   item_id    TEXT NOT NULL REFERENCES skin_items(item_id) ON DELETE CASCADE,
+                   platform   TEXT NOT NULL,
+                   price      NUMERIC,
+                   currency   TEXT,
+                   url        TEXT,
+                   quantity   INTEGER,
+                   updated_at BIGINT NOT NULL DEFAULT 0,
+                   PRIMARY KEY (item_id, platform)
+               )""")
         if not _table_exists(cur, "traffic_daily"):
             todo.append("""CREATE TABLE traffic_daily (
                    day            DATE PRIMARY KEY,

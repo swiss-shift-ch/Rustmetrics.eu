@@ -26,5 +26,17 @@
   replace with a proper CC0 pack mesh before final art pass.
 - **3D viewer:** built 2026-09-14 — `static/skin-viewer.js` loads the GLB
   (via vendored three.js in `static/vendor/three/`) and tints each slot
-  mesh to show which of the 6 outfit slots are filled. No per-skin
-  textures yet (`skin_items.image_url` is schema-ready but unpopulated).
+  mesh to show which of the 6 outfit slots are filled.
+- **Real per-skin textures on the mesh: tried, reverted.** `skin_items.image_url`
+  got populated (real Steam icons, mirrored locally — see
+  `backfill_skin_icons.py`) and briefly applied as a texture map per slot
+  mesh. Looked broken in practice: the Smart-UV-Project islands (see
+  above) are auto-generated and disconnected, so projecting one small
+  square product-icon photo across them gives each island an unrelated
+  crop of that image — a mottled torso next to a flat-colored sleeve,
+  not a coherent garment. Fixing this for real needs a hand-unwrapped UV
+  layout (seams placed so a texture actually wraps around each body part
+  coherently), not just swapping the image source — that's future work,
+  not attempted here. Real icons are shown as flat 2D thumbnails in the
+  Skin Checker's item/outfit lists instead (`static/app.js`), where they
+  render correctly with no UV involved.

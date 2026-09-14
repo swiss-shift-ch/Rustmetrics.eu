@@ -1326,6 +1326,17 @@ a.player-name.plink:hover {
 .skins-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .skins-item-name { color: var(--text); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skins-item-meta { color: var(--text-dim); font-size: 11px; }
+.skins-item-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
+.skins-item-icon-sm { width: 28px; height: 28px; }
+.skins-item-icon-empty { background: var(--bg-elevated); }
 .skins-outfit {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

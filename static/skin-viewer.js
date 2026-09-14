@@ -1,11 +1,14 @@
 /* RustMetrics — Skin Checker 3D outfit preview.
-   Loads the rigged/UV-split playermodel GLB and shows which of the 6
-   outfit slots are filled. When an item has image_url (a locally-mirrored
-   Steam icon — see backfill_skin_icons.py; Steam's own CDN has no CORS
-   headers so a direct cross-origin texture load silently fails), that
-   icon is applied as the slot's texture; otherwise the slot just tints
-   orange so coverage is still visible before icons are backfilled.
-   Vanilla JS, no build step. Depends on
+   Loads the rigged/UV-split playermodel GLB and highlights which of the
+   6 outfit slots are currently filled (orange = filled, gray = empty).
+   Deliberately NOT texturing the mesh with real skin icons: base_mesh's
+   UV islands are Smart-UV-Project auto-generated, not hand-unwrapped, so
+   projecting a small square item-icon photo across them fragments into
+   disconnected, mismatched patches per island (e.g. a mottled torso next
+   to a flat black sleeve) — tried it, looked worse than a plain tint.
+   Real icons are shown as flat 2D thumbnails in the item/outfit lists
+   instead (see app.js), where they render correctly. Vanilla JS, no
+   build step. Depends on
    /vendor/three/{three.min.js,GLTFLoader.js,OrbitControls.js} being
    loaded first (see index.html).
 */
@@ -33,57 +36,22 @@
   let scene = null;
   let camera = null;
   let controls = null;
-  let textureLoader = null;
-  let slotMeshes = {};    // slot name -> THREE.Mesh
-  let textureCache = {};  // image_url -> THREE.Texture
+  let slotMeshes = {};   // slot name -> THREE.Mesh
   let ready = false;
   let pendingOutfit = null;
 
-  function tintSlot(mesh, isFilled) {
-    mesh.material.map = null;
+  function applySlotState(slot, isFilled) {
+    const mesh = slotMeshes[slot];
+    if (!mesh || !mesh.material) return;
     mesh.material.color.setHex(isFilled ? COLOR_FILLED : COLOR_EMPTY);
     mesh.material.emissive?.setHex(isFilled ? COLOR_FILLED : 0x000000);
     mesh.material.emissiveIntensity = isFilled ? 0.15 : 0;
-    mesh.material.needsUpdate = true;
-  }
-
-  function applyTexture(mesh, url) {
-    const cached = textureCache[url];
-    if (cached) {
-      mesh.material.map = cached;
-      mesh.material.color.setHex(0xffffff);
-      mesh.material.emissive?.setHex(0x000000);
-      mesh.material.emissiveIntensity = 0;
-      mesh.material.needsUpdate = true;
-      return;
-    }
-    // Show the plain "filled" tint while the texture loads, then swap in.
-    tintSlot(mesh, true);
-    textureLoader.load(
-      url,
-      (tex) => {
-        tex.encoding = THREE.sRGBEncoding;
-        textureCache[url] = tex;
-        // Slot may have changed again while this was loading.
-        if (mesh.material.__pendingUrl === url) applyTexture(mesh, url);
-      },
-      undefined,
-      () => { /* same-origin mirror missing/broken — keep the tint fallback */ }
-    );
-  }
-
-  function applySlotState(slot, item) {
-    const mesh = slotMeshes[slot];
-    if (!mesh || !mesh.material) return;
-    mesh.material.__pendingUrl = item?.image_url || null;
-    if (item && item.image_url) applyTexture(mesh, item.image_url);
-    else tintSlot(mesh, Boolean(item));
   }
 
   function setOutfit(outfitBySlot) {
     if (!ready) { pendingOutfit = outfitBySlot; return; }
     for (const slot of Object.keys(SLOT_MESH)) {
-      applySlotState(slot, outfitBySlot && outfitBySlot[slot]);
+      applySlotState(slot, Boolean(outfitBySlot && outfitBySlot[slot]));
     }
   }
 
@@ -120,10 +88,7 @@
 
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputEncoding = THREE.sRGBEncoding;
     onResize(canvas);
-
-    textureLoader = new THREE.TextureLoader();
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 1.1));
     const key = new THREE.DirectionalLight(0xffffff, 0.9);

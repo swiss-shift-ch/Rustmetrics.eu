@@ -1723,8 +1723,12 @@
       const cheapest = cheapestPrice(it);
       const priceLabel = cheapest ? `${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)}` : "no price yet";
       const inOutfit = skinsOutfit.has(it.item_id);
+      const icon = it.image_url
+        ? `<img class="skins-item-icon" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
+        : `<span class="skins-item-icon skins-item-icon-empty" aria-hidden="true"></span>`;
       return `
         <div class="skins-item-row" data-item-id="${fmt.escape(it.item_id)}">
+          ${icon}
           <div class="skins-item-info">
             <span class="skins-item-name">${fmt.escape(it.name)}</span>
             <span class="skins-item-meta">${fmt.escape(it.raw_category || "uncategorized")} · ${priceLabel}</span>
@@ -1761,8 +1765,12 @@
       const priceLabel = cheapest
         ? `<a href="${fmt.escape(cheapest.url || '#')}" target="_blank" rel="noopener noreferrer">${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)} (${fmt.escape(cheapest.platform)})</a>`
         : "no price yet";
+      const icon = it.image_url
+        ? `<img class="skins-item-icon skins-item-icon-sm" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
+        : `<span class="skins-item-icon skins-item-icon-sm skins-item-icon-empty" aria-hidden="true"></span>`;
       return `
         <div class="skins-outfit-row" data-item-id="${fmt.escape(it.item_id)}">
+          ${icon}
           <span class="skins-item-name">${fmt.escape(it.name)}</span>
           <span class="skins-item-meta">${priceLabel}</span>
           <button type="button" class="btn-ghost skins-item-remove" title="Remove">✕</button>

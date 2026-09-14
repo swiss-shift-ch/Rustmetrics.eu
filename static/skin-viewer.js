@@ -32,6 +32,9 @@
   const COLOR_SKIN   = 0xc79b74; // body_skin, not an outfit slot
   const COLOR_BG     = 0x1d1d1d; // var(--bg-elevated)
 
+  const CAMERA_START = { x: 1.8, y: 1.5, z: 2.4 };
+  const TARGET_START = { x: 0, y: 0.95, z: 0 };
+
   let renderer = null;
   let scene = null;
   let camera = null;
@@ -84,7 +87,7 @@
     scene.background = new THREE.Color(COLOR_BG);
 
     camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
-    camera.position.set(1.8, 1.5, 2.4);
+    camera.position.set(CAMERA_START.x, CAMERA_START.y, CAMERA_START.z);
 
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -96,7 +99,7 @@
     scene.add(key);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 0.95, 0);
+    controls.target.set(TARGET_START.x, TARGET_START.y, TARGET_START.z);
     controls.enablePan = false;
     controls.minDistance = 1.2;
     controls.maxDistance = 5;
@@ -134,5 +137,18 @@
     animate();
   }
 
-  window.SkinViewer = { init, setOutfit };
+  function toggleAutoRotate() {
+    if (!controls) return false;
+    controls.autoRotate = !controls.autoRotate;
+    return controls.autoRotate;
+  }
+
+  function resetCamera() {
+    if (!camera || !controls) return;
+    camera.position.set(CAMERA_START.x, CAMERA_START.y, CAMERA_START.z);
+    controls.target.set(TARGET_START.x, TARGET_START.y, TARGET_START.z);
+    controls.update();
+  }
+
+  window.SkinViewer = { init, setOutfit, toggleAutoRotate, resetCamera };
 })();

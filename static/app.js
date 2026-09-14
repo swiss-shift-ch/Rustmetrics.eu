@@ -95,12 +95,17 @@
     friendsCount:   $("#friends-count"),
     friendsRefresh: $("#friends-refresh"),
     skinsSearch:    $("#skins-search"),
+    skinsItemCount: $("#skins-item-count"),
+    skinsSlotFilter: $("#skins-slot-filter"),
     skinsItemList:  $("#skins-item-list"),
     skinsOutfitList:  $("#skins-outfit-list"),
     skinsOutfitCount: $("#skins-outfit-count"),
+    skinsOutfitClear: $("#skins-outfit-clear"),
     skinsOutfitTotal: $("#skins-outfit-total"),
     skinsViewerCanvas: $("#skins-viewer-canvas"),
     skinsViewerHint:   $("#skins-viewer-hint"),
+    skinsViewerRotate: $("#skins-viewer-rotate"),
+    skinsViewerReset:  $("#skins-viewer-reset"),
   };
 
   const fmt = {
@@ -1709,12 +1714,22 @@
     return priced.reduce((a, b) => (b.price < a.price ? b : a));
   }
 
+  let skinsSlot = ""; // "" = all slots, else one of hat|mask|hoodie|pants|boots|backpack
+
+  function skinItemIcon(it, sizeClass = "") {
+    return it.image_url
+      ? `<img class="skins-item-icon ${sizeClass}" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
+      : `<svg class="skins-item-icon skins-item-icon-empty ${sizeClass}" aria-hidden="true"><use href="#icon-shirt"/></svg>`;
+  }
+
   function renderSkinItemList(filterText = "") {
     if (!els.skinsItemList) return;
     const q = filterText.trim().toLowerCase();
-    const matches = q
-      ? skinsItems.filter(it => it.name.toLowerCase().includes(q))
-      : skinsItems;
+    let matches = skinsSlot ? skinsItems.filter(it => it.slot === skinsSlot) : skinsItems;
+    if (q) matches = matches.filter(it => it.name.toLowerCase().includes(q));
+    if (els.skinsItemCount) {
+      els.skinsItemCount.textContent = `${matches.length} item${matches.length === 1 ? "" : "s"}`;
+    }
     if (!matches.length) {
       els.skinsItemList.innerHTML = '<div class="hint" style="padding:16px; text-align:center;">No items found.</div>';
       return;
@@ -1723,12 +1738,9 @@
       const cheapest = cheapestPrice(it);
       const priceLabel = cheapest ? `${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)}` : "no price yet";
       const inOutfit = skinsOutfit.has(it.item_id);
-      const icon = it.image_url
-        ? `<img class="skins-item-icon" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
-        : `<span class="skins-item-icon skins-item-icon-empty" aria-hidden="true"></span>`;
       return `
         <div class="skins-item-row" data-item-id="${fmt.escape(it.item_id)}">
-          ${icon}
+          ${skinItemIcon(it)}
           <div class="skins-item-info">
             <span class="skins-item-name">${fmt.escape(it.name)}</span>
             <span class="skins-item-meta">${fmt.escape(it.raw_category || "uncategorized")} · ${priceLabel}</span>
@@ -1765,15 +1777,14 @@
       const priceLabel = cheapest
         ? `<a href="${fmt.escape(cheapest.url || '#')}" target="_blank" rel="noopener noreferrer">${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)} (${fmt.escape(cheapest.platform)})</a>`
         : "no price yet";
-      const icon = it.image_url
-        ? `<img class="skins-item-icon skins-item-icon-sm" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
-        : `<span class="skins-item-icon skins-item-icon-sm skins-item-icon-empty" aria-hidden="true"></span>`;
       return `
         <div class="skins-outfit-row" data-item-id="${fmt.escape(it.item_id)}">
-          ${icon}
-          <span class="skins-item-name">${fmt.escape(it.name)}</span>
-          <span class="skins-item-meta">${priceLabel}</span>
-          <button type="button" class="btn-ghost skins-item-remove" title="Remove">✕</button>
+          ${skinItemIcon(it, "skins-item-icon-sm")}
+          <div class="skins-item-info">
+            <span class="skins-item-name">${fmt.escape(it.name)}</span>
+            <span class="skins-item-meta">${priceLabel}</span>
+          </div>
+          <button type="button" class="btn-ghost skins-item-remove" title="Remove"><svg class="icon-inline" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </div>`;
     }).join("");
     els.skinsOutfitTotal.textContent = `€${total.toFixed(2)}`;
@@ -1792,6 +1803,29 @@
   }
 
   els.skinsSearch?.addEventListener("input", () => renderSkinItemList(els.skinsSearch.value));
+
+  els.skinsSlotFilter?.addEventListener("click", (e) => {
+    const chip = e.target.closest(".skins-chip");
+    if (!chip) return;
+    skinsSlot = chip.dataset.slot || "";
+    els.skinsSlotFilter.querySelectorAll(".skins-chip").forEach(c => c.classList.toggle("is-active", c === chip));
+    renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
+  });
+
+  els.skinsOutfitClear?.addEventListener("click", () => {
+    if (!skinsOutfit.size) return;
+    skinsOutfit.clear();
+    renderOutfit();
+    renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
+  });
+
+  els.skinsViewerRotate?.addEventListener("click", () => {
+    const on = window.SkinViewer?.toggleAutoRotate();
+    els.skinsViewerRotate.classList.toggle("is-active", Boolean(on));
+    els.skinsViewerRotate.setAttribute("aria-pressed", String(Boolean(on)));
+  });
+
+  els.skinsViewerReset?.addEventListener("click", () => window.SkinViewer?.resetCamera());
 
   els.skinsItemList?.addEventListener("click", (e) => {
     const btn = e.target.closest(".skins-item-add");

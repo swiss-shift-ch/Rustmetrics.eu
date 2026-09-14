@@ -53,9 +53,86 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260914d" />
+<link rel="stylesheet" href="/style.css?v=20260914e" />
 </head>
 <body>
+
+<!-- Inline icon sprite — hand-drawn line icons matching the dark/brick-red
+     design language. Replaces emoji glyphs (🏠 👕 🔒 ⌬ …), which render as
+     missing-glyph boxes on systems without a color-emoji font. Reference
+     via <svg class="icon"><use href="#icon-NAME"/></svg>. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 11.5 12 4l8 7.5"/>
+    <path d="M6 10.5V20h4v-6h4v6h4v-9.5"/>
+  </symbol>
+  <symbol id="icon-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="8" height="8" rx="1.3"/>
+    <rect x="13" y="3" width="8" height="8" rx="1.3"/>
+    <rect x="3" y="13" width="8" height="8" rx="1.3"/>
+    <rect x="13" y="13" width="8" height="8" rx="1.3"/>
+  </symbol>
+  <symbol id="icon-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6h18M3 12h18M3 18h18"/>
+  </symbol>
+  <symbol id="icon-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8"/>
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M12 1v3M12 20v3M1 12h3M20 12h3"/>
+  </symbol>
+  <symbol id="icon-bars" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <rect x="4" y="12" width="3.6" height="8" rx="0.8"/>
+    <rect x="10.2" y="6" width="3.6" height="14" rx="0.8"/>
+    <rect x="16.4" y="9" width="3.6" height="11" rx="0.8"/>
+  </symbol>
+  <symbol id="icon-shirt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 4 4 7l2.4 3 1.6-1.2V20h8V8.8L17.6 10l2.4-3-4-3-2 1.5h-4L8 4Z"/>
+  </symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M7 5v14l12-7z"/>
+  </symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M3 6h18M3 12h18M3 18h18"/>
+    <circle cx="8" cy="6" r="2" fill="var(--bg-deepest, #0a0a0a)"/>
+    <circle cx="16" cy="12" r="2" fill="var(--bg-deepest, #0a0a0a)"/>
+    <circle cx="10" cy="18" r="2" fill="var(--bg-deepest, #0a0a0a)"/>
+  </symbol>
+  <symbol id="icon-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.25c-1.05.5-1.6 1.1-1.6 2.25"/>
+    <circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-steam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <circle cx="15" cy="8.5" r="2.2" fill="currentColor" stroke="none"/>
+    <circle cx="8.5" cy="14.5" r="2.4"/>
+    <path d="M10.3 12.9 13 10.3"/>
+  </symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.5 5.8 1.5 5.8h-15S6 12.7 6 8.5Z"/>
+    <path d="M10 17.3a2 2 0 0 0 4 0"/>
+  </symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5"/>
+    <path d="M20 12a8 8 0 0 1-14 5.3M4 20v-5h5"/>
+  </symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="11" width="14" height="9" rx="1.6"/>
+    <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+  </symbol>
+  <symbol id="icon-rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12a9 9 0 1 1 3 6.7"/>
+    <path d="M3 17v-4h4"/>
+  </symbol>
+  <symbol id="icon-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="8"/>
+    <path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M5 5l14 14M19 5 5 19"/>
+  </symbol>
+</svg>
 
 <header class="topbar">
   <a class="brand" href="/" title="RustMetrics — Home" style="text-decoration:none; color:inherit;">
@@ -72,7 +149,7 @@
   <div class="topbar-actions">
     <div id="user-slot" class="user-slot"></div>
     <button id="btn-notif" class="btn-ghost" title="Enable browser notifications">
-      <span class="bell">●</span><span class="lbl">Notif</span>
+      <svg class="bell"><use href="#icon-bell"/></svg><span class="lbl">Notif</span>
     </button>
     <span class="poll-indicator" id="poll-indicator" title="Last update"></span>
   </div>
@@ -82,38 +159,38 @@
 
   <nav class="sidebar">
     <a class="nav-item" href="/" aria-label="Home" title="Home">
-      <span class="nav-icon" aria-hidden="true">🏠</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"/></svg>
       <span class="nav-label">Home</span>
     </a>
     <button class="nav-item is-active" data-tab="watchlist" aria-label="Watchlist" title="Watchlist">
-      <span class="nav-icon" aria-hidden="true">▦</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-grid"/></svg>
       <span class="nav-label">Watchlist</span>
     </button>
     <button class="nav-item" data-tab="browse" aria-label="Server browser" title="Server browser">
-      <span class="nav-icon" aria-hidden="true">⌖</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-radar"/></svg>
       <span class="nav-label">Browser</span>
     </button>
     <button class="nav-item" data-tab="mystats" aria-label="My stats" title="My stats">
-      <span class="nav-icon" aria-hidden="true">◆</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-bars"/></svg>
       <span class="nav-label">My Stats</span>
     </button>
     <button class="nav-item" data-tab="skins" aria-label="Skin Checker" title="Skin Checker">
-      <span class="nav-icon" aria-hidden="true">👕</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-shirt"/></svg>
       <span class="nav-label">Skins</span>
     </button>
     <button class="nav-item" data-tab="play" title="Mini-game — Rust Flap" aria-label="Play Rust Flap">
-      <span class="nav-icon" aria-hidden="true">▶</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-play"/></svg>
       <span class="nav-label">Play</span>
     </button>
     <button class="nav-item" data-tab="settings" aria-label="Settings" title="Settings">
-      <span class="nav-icon" aria-hidden="true">⚙</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-settings"/></svg>
       <span class="nav-label">Settings</span>
     </button>
 
     <div class="nav-spacer"></div>
 
     <button class="nav-item nav-item-mini" data-tab="about" aria-label="About" title="About">
-      <span class="nav-icon" aria-hidden="true">?</span>
+      <svg class="nav-icon" aria-hidden="true"><use href="#icon-help"/></svg>
       <span class="nav-label">About</span>
     </button>
   </nav>
@@ -132,7 +209,7 @@
           <p>Your watchlist and watched players are linked to your Steam account — so they follow you anywhere
              you sign in, and nobody else has access to them.</p>
           <a href="/auth/steam/login" class="btn-steam">
-            <span class="steam-icon" aria-hidden="true">⌬</span>
+            <svg class="steam-icon" aria-hidden="true"><use href="#icon-steam"/></svg>
             Sign in with Steam
           </a>
           <p class="hint">Steam OpenID 2.0 · we only receive your SteamID, public display name and avatar.
@@ -156,7 +233,7 @@
           <div class="friends-head">
             <strong>Friends playing Rust now</strong>
             <span id="friends-count" class="friends-count"></span>
-            <button type="button" id="friends-refresh" class="btn-ghost" title="Refresh" aria-label="Refresh friends">⟳</button>
+            <button type="button" id="friends-refresh" class="btn-ghost" title="Refresh" aria-label="Refresh friends"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
           </div>
           <div id="friends-list" class="friends-list"></div>
         </section>
@@ -164,8 +241,8 @@
         <section class="servers-section">
           <div id="servers-toolbar" class="servers-toolbar" hidden>
             <div class="view-toggle" role="group" aria-label="View mode">
-              <button type="button" id="view-grid" class="view-btn is-active" title="Grid view">▦ Grid</button>
-              <button type="button" id="view-list" class="view-btn" title="List view">☰ List</button>
+              <button type="button" id="view-grid" class="view-btn is-active" title="Grid view"><svg class="icon-inline" aria-hidden="true"><use href="#icon-grid"/></svg> Grid</button>
+              <button type="button" id="view-list" class="view-btn" title="List view"><svg class="icon-inline" aria-hidden="true"><use href="#icon-list"/></svg> List</button>
             </div>
             <button type="button" id="btn-clear-watchlist" class="btn-ghost" title="Remove all servers from your watchlist">Clear Watchlist</button>
           </div>
@@ -241,7 +318,7 @@
           Min pop
           <input type="number" id="bf-min-pop" min="0" max="500" value="0" />
         </label>
-        <button type="button" id="bf-refresh" class="btn-ghost" title="Bypass cache, fetch fresh" aria-label="Refresh server list">⟳</button>
+        <button type="button" id="bf-refresh" class="btn-ghost" title="Bypass cache, fetch fresh" aria-label="Refresh server list"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
       </form>
 
       <div id="browse-loading" class="browse-loading" hidden>
@@ -298,27 +375,51 @@
     <!-- ── Skin Checker View — Outfit-Zusammenstellung + Preisvergleich ── -->
     <section class="view view-skins" data-view="skins" hidden>
       <header class="view-header">
-        <h2 class="view-title">Skin Checker</h2>
+        <h2 class="view-title">Outfit Builder</h2>
         <p class="view-sub">Pick real Rust skins and compare prices across marketplaces. The 3D preview
-          shows which of the 6 outfit slots you've filled — look for the item's own icon next to it
-          in the list for the real skin art.</p>
+          highlights which of the 6 outfit slots you've filled — drag to rotate, scroll to zoom.</p>
       </header>
 
       <div class="skins-layout">
         <div class="skins-picker">
-          <input id="skins-search" type="search" placeholder="Search items…" class="skins-search" />
+          <div class="skins-picker-head">
+            <input id="skins-search" type="search" placeholder="Search items…" class="skins-search" />
+            <span id="skins-item-count" class="skins-item-count hint"></span>
+          </div>
+          <div id="skins-slot-filter" class="skins-slot-filter" role="group" aria-label="Filter by outfit slot">
+            <button type="button" class="skins-chip is-active" data-slot="">All</button>
+            <button type="button" class="skins-chip" data-slot="hat">Hat</button>
+            <button type="button" class="skins-chip" data-slot="mask">Mask</button>
+            <button type="button" class="skins-chip" data-slot="hoodie">Hoodie</button>
+            <button type="button" class="skins-chip" data-slot="pants">Pants</button>
+            <button type="button" class="skins-chip" data-slot="boots">Boots</button>
+            <button type="button" class="skins-chip" data-slot="backpack">Backpack</button>
+          </div>
           <div id="skins-item-list" class="skins-item-list">
             <div class="hint" style="padding:16px; text-align:center;">Loading items…</div>
           </div>
         </div>
 
-        <div class="skins-viewer">
-          <canvas id="skins-viewer-canvas"></canvas>
-          <div id="skins-viewer-hint" class="skins-viewer-hint">Loading 3D preview…</div>
+        <div class="skins-viewer-col">
+          <div class="skins-viewer">
+            <canvas id="skins-viewer-canvas"></canvas>
+            <div class="skins-viewer-toolbar">
+              <button type="button" id="skins-viewer-rotate" class="btn-icon is-active" title="Toggle auto-rotate" aria-label="Toggle auto-rotate" aria-pressed="true">
+                <svg class="icon-inline" aria-hidden="true"><use href="#icon-rotate"/></svg>
+              </button>
+              <button type="button" id="skins-viewer-reset" class="btn-icon" title="Reset camera" aria-label="Reset camera">
+                <svg class="icon-inline" aria-hidden="true"><use href="#icon-target"/></svg>
+              </button>
+            </div>
+            <div id="skins-viewer-hint" class="skins-viewer-hint">Loading 3D preview…</div>
+          </div>
         </div>
 
         <aside class="skins-outfit">
-          <h3>Your outfit <span id="skins-outfit-count" class="hint">(0)</span></h3>
+          <div class="skins-outfit-head">
+            <h3>Your outfit <span id="skins-outfit-count" class="hint">(0)</span></h3>
+            <button type="button" id="skins-outfit-clear" class="btn-ghost" title="Remove all items">Clear</button>
+          </div>
           <div id="skins-outfit-list" class="skins-outfit-list">
             <p class="hint" style="padding:12px 0;">No items picked yet — click an item on the left to add it.</p>
           </div>
@@ -346,7 +447,7 @@
           <h2>Sign in to see your Rust stats</h2>
           <p>Kills, deaths, headshots, gathered materials, bullets fired — everything Rust uploads to Steam, presented neatly.</p>
           <a href="/auth/steam/login" class="btn-steam">
-            <span class="steam-icon" aria-hidden="true">⌬</span> Sign in with Steam
+            <svg class="steam-icon" aria-hidden="true"><use href="#icon-steam"/></svg> Sign in with Steam
           </a>
         </div>
       </div>
@@ -355,12 +456,12 @@
         <div id="mystats-loading" class="hint" style="padding:20px; text-align:center;">Loading your stats…</div>
         <div id="mystats-content" hidden></div>
         <div id="mystats-private" class="hint" hidden style="padding:24px; text-align:center;">
-          🔒 Your Steam profile has <strong>Game Details</strong> set to private — Rust stats aren't readable.<br>
+          <svg class="icon-inline" aria-hidden="true"><use href="#icon-lock"/></svg> Your Steam profile has <strong>Game Details</strong> set to private — Rust stats aren't readable.<br>
           Open Steam → your profile → <strong>Edit Profile → Privacy Settings → Game Details</strong>, set to <strong>Public</strong>, save, then refresh.
         </div>
         <div id="mystats-error" class="hint" hidden style="padding:20px; text-align:center; color:var(--red);"></div>
         <div style="text-align:right; margin-top:14px;">
-          <button id="btn-mystats-refresh" class="btn-ghost" title="Force a fresh fetch from Steam">⟳ Refresh from Steam</button>
+          <button id="btn-mystats-refresh" class="btn-ghost" title="Force a fresh fetch from Steam"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"/></svg> Refresh from Steam</button>
         </div>
       </div>
     </section>
@@ -377,7 +478,7 @@
           <h2>Sign in to manage settings</h2>
           <p>Settings live on your account. Sign in with Steam to get them.</p>
           <a href="/auth/steam/login" class="btn-steam">
-            <span class="steam-icon" aria-hidden="true">⌬</span> Sign in with Steam
+            <svg class="steam-icon" aria-hidden="true"><use href="#icon-steam"/></svg> Sign in with Steam
           </a>
         </div>
       </div>
@@ -504,7 +605,7 @@
 <script src="/vendor/three/three.min.js"></script>
 <script src="/vendor/three/GLTFLoader.js"></script>
 <script src="/vendor/three/OrbitControls.js"></script>
-<script src="/skin-viewer.js?v=20260914d"></script>
-<script src="/app.js?v=20260914d"></script>
+<script src="/skin-viewer.js?v=20260914e"></script>
+<script src="/app.js?v=20260914e"></script>
 </body>
 </html>

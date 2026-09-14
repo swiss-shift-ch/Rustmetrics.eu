@@ -157,7 +157,7 @@ a:hover { color: var(--accent); text-decoration: underline; }
   border-color: var(--accent);
   color: var(--accent-bright);
 }
-.btn-ghost .bell { font-size: 9px; line-height: 1; color: var(--accent); }
+.btn-ghost .bell { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; color: var(--accent); }
 .btn-ghost.active .bell { color: var(--green); }
 
 .poll-indicator {
@@ -217,10 +217,17 @@ a:hover { color: var(--accent); text-decoration: underline; }
 .nav-icon {
   display: inline-block;
   width: 18px;
-  font-size: 14px;
-  text-align: center;
+  height: 18px;
+  flex: none;
   color: var(--text-dim);
   transition: color 0.1s;
+}
+.icon-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  color: currentColor;
 }
 .nav-item:hover .nav-icon { color: var(--text-muted); }
 .nav-item.is-active .nav-icon { color: var(--accent); }
@@ -1261,7 +1268,7 @@ a.player-name.plink:hover {
 .session-list .sess .sstart { color: var(--text-dim); font-size: 11px; }
 .session-list .sess .sdur { color: var(--hazmat); font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
-/* ─── Skin Checker view ──────────────────────────────────────────────── */
+/* ─── Skin Checker / Outfit Builder view ─────────────────────────────── */
 .skins-layout {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(260px, 340px) 320px;
@@ -1270,12 +1277,44 @@ a.player-name.plink:hover {
 }
 @media (max-width: 1200px) {
   .skins-layout { grid-template-columns: minmax(280px, 1fr) 320px; }
-  .skins-viewer { grid-column: 1 / -1; }
+  .skins-viewer-col { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
   .skins-layout { grid-template-columns: 1fr; }
-  .skins-viewer { grid-column: auto; }
+  .skins-viewer-col { grid-column: auto; }
 }
+
+.skins-picker-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.skins-picker-head .skins-search { margin-bottom: 0; flex: 1 1 auto; }
+.skins-item-count { flex: none; font-size: 11px; white-space: nowrap; }
+
+.skins-slot-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.skins-chip {
+  background: var(--bg-table-row);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.skins-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.skins-chip.is-active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-bright);
+}
+
+.skins-viewer-col { display: flex; flex-direction: column; gap: 8px; }
 .skins-viewer {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -1285,6 +1324,25 @@ a.player-name.plink:hover {
   overflow: hidden;
 }
 .skins-viewer canvas { display: block; width: 100%; height: 100%; }
+.skins-viewer-toolbar {
+  position: absolute;
+  top: 10px; right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+.btn-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  background: rgba(10,10,10,0.65);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.btn-icon:hover { color: var(--text); border-color: var(--text-dim); }
+.btn-icon.is-active { color: var(--accent-bright); border-color: var(--accent); background: var(--accent-bg); }
 .skins-viewer-hint {
   position: absolute;
   left: 0; right: 0; bottom: 0;
@@ -1295,6 +1353,7 @@ a.player-name.plink:hover {
   text-align: center;
   pointer-events: none;
 }
+
 .skins-search {
   width: 100%;
   box-sizing: border-box;
@@ -1322,7 +1381,9 @@ a.player-name.plink:hover {
   background: var(--bg-table-row);
   border: 1px solid var(--border);
   border-radius: 6px;
+  transition: border-color 0.1s, background 0.1s;
 }
+.skins-item-row:hover { border-color: var(--border-strong); background: var(--bg-card); }
 .skins-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .skins-item-name { color: var(--text); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skins-item-meta { color: var(--text-dim); font-size: 11px; }
@@ -1336,16 +1397,20 @@ a.player-name.plink:hover {
   object-fit: contain;
 }
 .skins-item-icon-sm { width: 28px; height: 28px; }
-.skins-item-icon-empty { background: var(--bg-elevated); }
+svg.skins-item-icon-empty { padding: 8px; color: var(--text-dim); }
+
 .skins-outfit {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px 16px;
 }
-.skins-outfit h3 { margin: 0 0 10px 0; font-size: 13px; color: var(--text); }
+.skins-outfit-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.skins-outfit-head h3 { margin: 0; font-size: 13px; color: var(--text); }
+.skins-outfit-head .btn-ghost { padding: 3px 10px; font-size: 11px; }
 .skins-outfit-list { display: flex; flex-direction: column; gap: 6px; }
-.skins-outfit-row .skins-item-name { max-width: 140px; }
+.skins-outfit-row .skins-item-info { flex: 1 1 auto; }
+.skins-outfit-row .skins-item-remove { padding: 4px 6px; flex: none; }
 .skins-outfit-total {
   display: flex;
   justify-content: space-between;
@@ -1434,7 +1499,7 @@ a.player-name.plink:hover {
   color: #fff;
   text-decoration: none;
 }
-.btn-steam .steam-icon { font-size: 16px; line-height: 1; }
+.btn-steam .steam-icon { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; }
 
 .btn-logout {
   background: transparent;
@@ -1554,7 +1619,6 @@ a.player-name.plink:hover {
   .sidebar { padding: 8px 0; }
   .nav-item { padding: 14px 10px 14px 12px; gap: 0; justify-content: center; border-left-width: 3px; }
   .nav-label { display: none; }
-  .nav-icon { font-size: 18px; }
   .topbar-stats { display: none; }
   .btn-ghost .lbl { display: none; }
   .view { padding: 16px; }

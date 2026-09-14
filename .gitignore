@@ -39,6 +39,7 @@ logs/
 *.backup
 *.dump
 *.sql.gz
+*.blend1
 
 # Build / generated
 dist/

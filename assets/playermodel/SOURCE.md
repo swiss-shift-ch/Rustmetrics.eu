@@ -63,3 +63,35 @@
   4. Re-export to `static/playermodel/base_mesh.glb`, same as before.
   No code changes needed on export — `SLOT_TEXTURE_MESH`/`SLOT_HIDE_MESHES`
   in `static/skin-viewer.js` already list these exact names.
+
+- **Base body swapped to a Character Creator 4 export (2026-09-14).** The
+  CC0 OpenGameArt body mesh (`body_skin`) is superseded — replaced with a
+  higher-quality body generated in Reallusion Character Creator 4 and
+  exported as `Model.glb` (confirmed with the user: their CC4 license
+  permits redistributing the exported model file, not just using it
+  in-app). The CC4 export arrived unrigged with generic mesh-data names
+  but its scene-graph node names were already sensible body-part labels
+  (`head`, `feet`, `torso_full`, `torso_long_shirt`, `torso_tshirt`,
+  `legs_upper_lower`, `legs_upper_lower_tummy`, `underwear`,
+  `arms_shoulders_hands`, `hands_full`, `hands_gloves`, `head_eyes`,
+  `head_eyes_2`, `head_eye_lashes`) — several match the clipping-prevention
+  mesh names `skin-viewer.js` was already looking for, so those light up
+  now with no code changes. Workflow: imported into `base_mesh.blend`
+  alongside the existing `PlayerRig`, translated up so feet sit at z=0
+  (source export's origin wasn't floor-based), temporarily posed
+  `upper_arm.L`/`upper_arm.R` down to match the CC4 mesh's arms-down
+  idle pose, parented to `PlayerRig` with Automatic Weights (bind
+  computed against that matching pose), then cleared the pose back to
+  rest — the mesh's arms follow the armature back into the rig's
+  T-pose correctly. Old `body_skin` mesh kept in the file but hidden
+  (not deleted) rather than removed outright. The 6 outfit-slot tint
+  meshes (`body_hoodie`, `body_pants`, `body_boots`, `head_hat`,
+  `head_mask`, `back_backpack`) were left as-is and still roughly fit
+  now that the new body is aligned to the same scale/pose — not
+  re-fitted to the new body's exact proportions, so minor clipping is
+  possible and worth a visual check. Re-exported to
+  `static/playermodel/base_mesh.glb` (verified: 1 skin, 21 joints, all
+  expected mesh nodes present). **Not yet done:** re-fitting the outfit
+  slot meshes tightly to the new body shape, and the hand-unwrapped
+  `skin_<slot>` overlay meshes from the section above (still fully
+  no-op against this export, same as before).

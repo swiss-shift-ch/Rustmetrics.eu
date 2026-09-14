@@ -37,6 +37,31 @@ SKINPORT_APP_ID = STEAM_APPID
 STEAM_PRICEOVERVIEW = "https://steamcommunity.com/market/priceoverview/"
 STEAM_CURRENCY_EUR = 3
 
+# Direktanbieter-Liste aus dem Bau-Auftrag (Abschnitt 6 + 6b) — Basis-URLs
+# fest vom Auftrag vorgegeben, nicht geraten. Per-Item-Deeplinks (statt nur
+# Shop-Startseite) brauchen pro Plattform verifizierte Such-URL-Syntax; das
+# ist noch offen (siehe Abnahme-Checkliste Punkt 4) und wird nachgezogen,
+# sobald jede Syntax einzeln bestaetigt ist. Bis dahin zeigt das Frontend
+# hier die Shop-Basis-URL, nicht raten wir uns eine Query-Param-Syntax
+# zusammen, die falsch sein koennte.
+MARKETPLACES: list[dict] = [
+    {"id": "steam",       "name": "Steam Community Market", "url": "https://steamcommunity.com/market/search?appid=252490", "is_gambling": False},
+    {"id": "skinport",    "name": "Skinport",                "url": "https://skinport.com/rust/market",                     "is_gambling": False},
+    {"id": "dmarket",     "name": "DMarket",                 "url": "https://dmarket.com/ingame-items/item-list/rust-skins", "is_gambling": False},
+    {"id": "waxpeer",     "name": "Waxpeer",                 "url": "https://waxpeer.com",                                  "is_gambling": False},
+    {"id": "lis-skins",   "name": "Lis-Skins",                "url": "https://lis-skins.com/market/rust/",                   "is_gambling": False},
+    {"id": "tradeit",     "name": "Tradeit.gg",               "url": "https://tradeit.gg/rust/store",                        "is_gambling": False},
+    {"id": "skinsmonkey", "name": "SkinsMonkey",              "url": "https://skinsmonkey.com/trade-rust-skins",             "is_gambling": False},
+    {"id": "rapidskins",  "name": "RapidSkins",               "url": "https://www.rapidskins.com/buy/",                      "is_gambling": False},
+    {"id": "skinland",    "name": "Skin.Land",                "url": "https://skin.land/market/rust/",                       "is_gambling": False},
+    {"id": "swapgg",      "name": "Swap.gg",                  "url": "https://swap.gg/rust/trade",                           "is_gambling": False},
+    {"id": "skinswap",    "name": "SkinSwap",                 "url": "https://skinswap.com/buy-rust-skins",                  "is_gambling": False},
+    {"id": "itrade",      "name": "iTrade.gg",                "url": "https://itrade.gg/trade/rust",                         "is_gambling": False},
+    {"id": "rustskins",   "name": "RustSkins.com",            "url": "https://rustskins.com/",                               "is_gambling": False},
+    {"id": "rustcasino",  "name": "RustCasino",               "url": "https://rustcasino.com/market",                        "is_gambling": True},
+    {"id": "hellcase",    "name": "Hellcase",                 "url": "https://hellcase.com/rust",                            "is_gambling": True},
+]
+
 # Skinport erlaubt laut eigener Doku 8 Requests / 5 Minuten. Wir holen mit
 # einem einzigen Call ALLE Rust-Items auf einmal (kein Loop noetig), also
 # reicht ein grosszuegiger Mindestabstand zwischen zwei Runs.

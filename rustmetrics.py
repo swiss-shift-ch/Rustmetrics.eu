@@ -64,7 +64,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
-from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC
+from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
 
 _bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False, "paused_until": 0.0}
@@ -3988,6 +3988,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(api_skins_items())
             except Exception as e:
                 return self._fail(e, "skins")
+        if u.path == "/api/skins/marketplaces":
+            return self._json({"marketplaces": MARKETPLACES})
         if u.path == "/api/servers":
             sess = self._read_session()
             if not sess: return self._json({"error": "auth required"}, 401)

@@ -3,7 +3,7 @@
 Ordnet ausgewaehlte, real existierende Rust-Basisitems (keine geratenen
 Namen — jedes hier gelistete Item ist ein tatsaechliches Vanilla-Kleidungs-
 /Ruestungsitem im Spiel) einem der sechs Playermodel-Slots zu:
-hoodie | pants | boots | mask | hat | backpack
+hoodie | chest | pants | kilt | boots | mask | hat | backpack
 
 Bewusst manuell und klein gehalten (siehe Bau-Auftrag Abschnitt 2 und die
 Diskussion dazu): wir uebernehmen KEINE Slot-Datenbank von Drittseiten
@@ -19,7 +19,9 @@ from __future__ import annotations
 
 # item_id hier ist der Basis-Item-Name (market_hash_name-Praefix), wie ihn
 # auch Skinport/Steam fuer die Vanilla-Variante des Items verwenden.
-# slot: hoodie | pants | boots | mask | hat | backpack
+# slot: hoodie | chest | pants | kilt | boots | mask | hat | backpack
+# (chest = Torso-Ruestung UEBER dem Hoodie, kilt = Bein-Ruestung UEBER der
+#  Hose — in Rust eigene Slots, im 3D-Viewer eigene Schalen ueber den Basis-Slots)
 SLOT_MAP: dict[str, str] = {
     # Kopf / Maske
     "Bandana Mask":        "mask",
@@ -32,16 +34,16 @@ SLOT_MAP: dict[str, str] = {
     "Coffee Can Helmet":   "hat",
     "Riot Helmet":         "hat",
     "Wood Armor Helmet":   "hat",
-    "Metal Chest Plate":   "hoodie",  # Torso-Ruestung -> hoodie-Slot
+    "Metal Chest Plate":   "chest",
     "Hoodie":              "hoodie",
     "Jacket":              "hoodie",
-    "Wood Armor Jacket":   "hoodie",
-    "Roadsign Jacket":     "hoodie",
+    "Wood Armor Jacket":   "chest",
+    "Roadsign Jacket":     "chest",
     "Hazmat Suit":         "hoodie",  # deckt technisch mehrere Slots ab,
                                        # hier vereinfachend torso zugeordnet
     "Pants":               "pants",
-    "Wood Armor Pants":    "pants",
-    "Roadsign Kilt":       "pants",
+    "Wood Armor Pants":    "kilt",
+    "Roadsign Kilt":       "kilt",
     "Boots":               "boots",
     "Hide Boots":          "boots",
     # Handschuhe (Leather/Tactical Gloves) bewusst NICHT gemappt: es gibt
@@ -50,7 +52,7 @@ SLOT_MAP: dict[str, str] = {
     # waere falsch.
     "Small Backpack":      "backpack",
     "Large Backpack":      "backpack",
-    "Road Sign Jacket":    "hoodie",
+    "Road Sign Jacket":    "chest",
 }
 
 
@@ -86,8 +88,8 @@ SLUG_SLOT_MAP: dict[str, str] = {
     "hoodie":              "hoodie",
     "jacket":              "hoodie",
     "snow-jacket":         "hoodie",
-    "roadsign-jacket":     "hoodie",
-    "metal-torso-plate":   "hoodie",
+    "roadsign-jacket":     "chest",
+    "metal-torso-plate":   "chest",
     "hide-poncho":         "hoodie",
     "burlap-shirt":        "hoodie",
     "tshirt":              "hoodie",
@@ -98,7 +100,7 @@ SLUG_SLOT_MAP: dict[str, str] = {
     # pants
     "pants":               "pants",
     "shorts":              "pants",
-    "roadsign-kilt":       "pants",
+    "roadsign-kilt":       "kilt",
     "hide-skirt":          "pants",
     "hide-pants":          "pants",
     "burlap-trousers":     "pants",

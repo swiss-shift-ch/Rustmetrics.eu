@@ -1718,7 +1718,7 @@
     return priced.reduce((a, b) => (b.price < a.price ? b : a));
   }
 
-  let skinsSlot = ""; // "" = all slots, else one of hat|mask|hoodie|pants|boots|backpack
+  let skinsSlot = ""; // "" = all slots, else one of hat|mask|hoodie|chest|pants|kilt|boots|backpack
 
   const SKIN_ICON_PREFIX = "/skins/icons/"; // same-origin mirror written by backfill_skin_icons.py
 
@@ -1774,7 +1774,7 @@
   const OUTFIT_LS_KEY     = LS_PREFIX + "outfit";
   const OUTFIT_URL_PARAM  = "outfit";
   const OUTFIT_ID_SEP     = "|";   // item names can contain commas ("Salvaged Shirt, Coat and Tie")
-  const OUTFIT_MAX_ITEMS  = 6;     // one per slot
+  const OUTFIT_MAX_ITEMS  = 8;     // one per slot
   const SHARE_FEEDBACK_MS = 1600;
   const CLIPBOARD_TIMEOUT_MS = 1500; // clipboard writes can hang without permission; fall back instead
   const STEAM_MARKET_LISTING = "https://steamcommunity.com/market/listings/252490/";

@@ -206,4 +206,4 @@ class TestRefreshSkinPrices:
         ]
         assert len(insert_calls) == 1
         item_id, name, raw_category, slot, _created_at = insert_calls[0]
-        assert (item_id, name, raw_category, slot) == ("Ornate Vest", "Ornate Vest", "clothing", "hoodie")
+        assert (item_id, name, raw_category, slot) == ("Ornate Vest", "Ornate Vest", "clothing", "chest")

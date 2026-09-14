@@ -25,7 +25,7 @@ class TestSlotForName:
         assert slot_for_name("Some Completely Unknown Weapon Skin") is None
 
     def test_every_slot_map_entry_maps_to_valid_slot(self):
-        valid_slots = {"hoodie", "pants", "boots", "mask", "hat", "backpack"}
+        valid_slots = {"hoodie", "chest", "pants", "kilt", "boots", "mask", "hat", "backpack"}
         for name, slot in SLOT_MAP.items():
             assert slot in valid_slots, f"{name!r} maps to invalid slot {slot!r}"
 
@@ -50,10 +50,10 @@ class TestSlotForSlug:
         assert slot_for_slug(None) is None
 
     def test_hoodie_slug(self):
-        assert slot_for_slug("roadsign-jacket") == "hoodie"
+        assert slot_for_slug("roadsign-jacket") == "chest"
 
     def test_pants_slug(self):
-        assert slot_for_slug("roadsign-kilt") == "pants"
+        assert slot_for_slug("roadsign-kilt") == "kilt"
 
     def test_boots_slug(self):
         assert slot_for_slug("burlap-shoes") == "boots"
@@ -65,7 +65,7 @@ class TestSlotForSlug:
         assert slot_for_slug("miner-s-hat") == "hat"
 
     def test_is_case_insensitive(self):
-        assert slot_for_slug("Roadsign-Jacket") == "hoodie"
+        assert slot_for_slug("Roadsign-Jacket") == "chest"
 
     def test_returns_none_for_unknown_slug(self):
         assert slot_for_slug("some-unknown-slug") is None
@@ -82,7 +82,7 @@ class TestSlotForSlug:
         assert slot_for_slug("tactical-gloves") is None
 
     def test_every_slug_slot_map_entry_maps_to_valid_slot(self):
-        valid_slots = {"hoodie", "pants", "boots", "mask", "hat", "backpack"}
+        valid_slots = {"hoodie", "chest", "pants", "kilt", "boots", "mask", "hat", "backpack"}
         for slug, slot in SLUG_SLOT_MAP.items():
             assert slot in valid_slots, f"{slug!r} maps to invalid slot {slot!r}"
 
@@ -91,7 +91,7 @@ class TestSlotForItem:
     def test_prefers_slug_over_misleading_name(self):
         # "Ornate Vest" sounds like a hoodie by name-matching heuristics,
         # but Skinport's own base-item slug says it's a roadsign-jacket skin.
-        assert slot_for_item("Ornate Vest", "roadsign-jacket") == "hoodie"
+        assert slot_for_item("Ornate Vest", "roadsign-jacket") == "chest"
 
     def test_falls_back_to_name_when_base_item_is_none(self):
         # Backpacks aren't in the clothing/armor slugs, so name fallback

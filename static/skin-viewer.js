@@ -23,7 +23,11 @@
   const MASK_MIN_Y = 1.49;     // chin
   const MASK_MIN_Z = -0.03;    // front half of the head only
   const BOOT_MAX_Y = 0.30;     // ankle-high boots: feet plus the bottom of the shins
+  const TORSO_MAX_ABS_X = 0.23; // torso_full without the upper arms
+  const TORSO_MIN_Y = 1.0;
+  const KILT_MIN_Y = 0.52;      // hips down to just above the knee
   const SHELL_INFLATE = 0.006; // metres; enough to clear the skin without floating
+  const ARMOR_INFLATE = 0.014; // armour sits outside the hoodie/pants shell
   const BOOT_INFLATE = 0.010;  // boots sit outside the pants shell at the ankle
 
   const SLOT_SHELLS = {
@@ -32,9 +36,21 @@
       keepVertex: (x, y) => !(y < HAND_MAX_Y && Math.abs(x) > HAND_MIN_ABS_X),
       print: { width: 0.50, v0: 0.04, v1: 0.98 },
     },
+    chest: {
+      sources: ["torso_full"],
+      keepVertex: (x, y) => Math.abs(x) < TORSO_MAX_ABS_X && y > TORSO_MIN_Y,
+      inflate: ARMOR_INFLATE,
+      print: { width: 0.50, v0: 0.04, v1: 0.98 },
+    },
     pants: {
       sources: ["underwear", "legs_upper_lower_tummy"],
       print: { width: 0.60, v0: 0.03, v1: 0.98 },
+    },
+    kilt: {
+      sources: ["underwear", "legs_upper_lower_tummy"],
+      keepVertex: (x, y) => y > KILT_MIN_Y,
+      inflate: ARMOR_INFLATE,
+      print: { width: 0.60, v0: 0.05, v1: 0.95 },
     },
     boots: {
       sources: ["feet", "legs_upper_lower_tummy"],
@@ -64,7 +80,7 @@
   // CC4 alternates that duplicate other pieces (z-fight when all shown).
   const DUPLICATE_HIDDEN = ["hands_gloves", "torso_tshirt", "torso_long_shirt", "legs_upper_lower"];
 
-  const COLOR_LOADING = 0x6b6b6b; // shell tint while the icon is still loading
+  const COLOR_LOADING = 0x2e2e2e; // shell tint while the icon loads, or when an item has none yet
   const COLOR_BG      = 0x1d1d1d; // var(--bg-elevated)
   const CAMERA_START  = { x: 1.8, y: 1.5, z: 2.4 };
   const TARGET_START  = { x: 0, y: 0.95, z: 0 };

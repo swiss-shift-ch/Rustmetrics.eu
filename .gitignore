@@ -44,9 +44,18 @@ logs/
 dist/
 build/
 
+# Skin-icon cache — downloaded from Steam by backfill_skin_icons.py at
+# runtime (same-origin mirror to dodge Steam CDN's missing CORS headers),
+# not source. Same pattern as prices: cached data, never committed.
+static/skins/icons/
+
 # Test artifacts that contain runtime data
 test_output/
 .coverage
 
 # Local Claude campaign/planning files
 .claude/
+
+# Local-only marketing docs and utility scripts — not for the public repo
+marketing/
+scripts/

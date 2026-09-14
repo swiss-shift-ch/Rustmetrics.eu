@@ -1,7 +1,13 @@
 """Tests fuer rm_skins.py — reine Parsing/Mapping-Logik, kein Netzwerk/DB."""
 from __future__ import annotations
 
-from rm_skins import category_from_market_page, skinport_item_to_row
+from rm_skins import (
+    STEAM_ICON_CDN,
+    category_from_market_page,
+    icon_hash_from_listing_html,
+    local_icon_filename,
+    skinport_item_to_row,
+)
 
 
 class TestCategoryFromMarketPage:
@@ -76,3 +82,63 @@ class TestSkinportItemToRow:
         row = skinport_item_to_row(item)
         assert row["price"] == 3.0
         assert isinstance(row["price"], float)
+
+
+class TestIconHashFromListingHtml:
+    # Realer (gekuerzter) Ausschnitt einer Steam-Market-Listing-Seite,
+    # 2026-09-14 live gegen appid=252490 verifiziert: das Icon steckt im
+    # mehrfach escapten Render-State der normalen HTML-Seite, nicht in
+    # einem sauberen JSON-Feld.
+    REAL_FIXTURE = (
+        r':\\\"42413e\\\",\\\"icon_url\\\":\\\"6TMcQ7eX6E0EZl2byXi7vaVKyDk_zQLX'
+        r'05x6eLCFM9neAckxGDf7qU2e2gu64OnAeQ7835Fd4WPEfCk4nReh8DEiv5daPKo2rL0xR'
+        r'PG-mc9EvQ8\\\",\\\"icon_url_large\\\":\\\"6TMcQ7eX6E0EZl2byXi7vaVKyDk'
+        r'_zQLX05x6eLCFM9neAckxGDf7qU2e2gu64OnAeQ7835Fd4WPEfDY0jhyo8DEiv5daPKo2'
+        r'rL0xRPG-VGIUR0s\\\"'
+    )
+    EXPECTED_HASH = (
+        "6TMcQ7eX6E0EZl2byXi7vaVKyDk_zQLX05x6eLCFM9neAckxGDf7qU2e2gu64OnAeQ7835"
+        "Fd4WPEfCk4nReh8DEiv5daPKo2rL0xRPG-mc9EvQ8"
+    )
+
+    def test_extracts_hash_from_real_escaped_fixture(self):
+        assert icon_hash_from_listing_html(self.REAL_FIXTURE) == self.EXPECTED_HASH
+
+    def test_does_not_match_icon_url_large_instead(self):
+        # icon_url_large's hash differs (ends "-VGIUR0s") — a bad regex
+        # that treats icon_url as a substring-anywhere match could grab
+        # the wrong (larger) variant instead of the plain one.
+        result = icon_hash_from_listing_html(self.REAL_FIXTURE)
+        assert not result.endswith("VGIUR0s")
+
+    def test_returns_none_when_icon_url_absent(self):
+        assert icon_hash_from_listing_html("<html>no listings for this item</html>") is None
+
+    def test_returns_none_for_empty_string(self):
+        assert icon_hash_from_listing_html("") is None
+
+
+class TestSteamIconCdnUrl:
+    def test_cdn_template_builds_expected_shape(self):
+        url = STEAM_ICON_CDN.format(icon_hash="abc123_-XYZ")
+        assert url == "https://community.cloudflare.steamstatic.com/economy/image/abc123_-XYZ/128x128"
+
+
+class TestLocalIconFilename:
+    # Steams CDN schickt kein Access-Control-Allow-Origin — direktes Laden
+    # als WebGL-Textur scheitert an CORS (verifiziert 2026-09-14 gegen
+    # echten Chromium). Icons muessen deshalb lokal (same-origin) gespiegelt
+    # werden; item_id/Skin-Namen enthalten Leerzeichen/Apostrophe/Unicode
+    # und sind daher kein sicherer Dateiname.
+    def test_returns_png_filename(self):
+        assert local_icon_filename("Stalker Hoodie").endswith(".png")
+
+    def test_is_filesystem_safe_for_names_with_spaces_and_apostrophes(self):
+        name = local_icon_filename("BCHILLZ! Hoodie's Édition")
+        assert all(c.isalnum() or c in "._-" for c in name)
+
+    def test_is_deterministic(self):
+        assert local_icon_filename("Stalker Hoodie") == local_icon_filename("Stalker Hoodie")
+
+    def test_different_names_produce_different_filenames(self):
+        assert local_icon_filename("Stalker Hoodie") != local_icon_filename("Stalker Pants")

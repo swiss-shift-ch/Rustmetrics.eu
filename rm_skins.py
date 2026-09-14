@@ -16,7 +16,10 @@ erzeugen.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
+import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -70,10 +73,12 @@ SKINPORT_MIN_INTERVAL_SEC = _env("RM_SKINPORT_MIN_INTERVAL_SEC", 3600, int)
 _UA = "Mozilla/5.0 (compatible; RustMetrics/1.0; +https://rustmetrics.eu)"
 
 
-def _http_get(url: str, headers: dict) -> bytes:
+def _http_get(url: str, headers: dict, max_bytes: int | None = None) -> bytes:
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=15) as r:
-        raw = r.read()
+        raw = r.read(max_bytes + 1) if max_bytes else r.read()
+        if max_bytes and len(raw) > max_bytes:
+            raise RuntimeError(f"Antwort zu gross (> {max_bytes} Bytes): {url}")
         enc = (r.headers.get("Content-Encoding") or "").lower()
         if enc == "br":
             if brotli is None:
@@ -213,3 +218,160 @@ def steam_priceoverview(market_hash_name: str, currency: int = STEAM_CURRENCY_EU
         "median_price": data.get("median_price"),
         "volume": data.get("volume"),
     }
+
+
+# ── Icon-URLs fuer den 3D-Viewer ─────────────────────────────────────────
+#
+# Weder Skinport noch Steams priceoverview-Endpoint liefern ein Icon-Feld.
+# Die einzige oeffentliche Quelle ist die normale Steam-Market-Listing-Seite
+# (".../market/listings/<appid>/<name>") — kein JSON-Endpoint, das Icon
+# steckt im eingebetteten, mehrfach escapten Render-State der Seiten-HTML.
+# Deshalb Regex statt eines HTML-Parsers: ein einzelnes Feld rechtfertigt
+# keine neue Dependency, und das Format ist stabil genug fuer einen
+# gezielten Regex (siehe Tests mit echtem Live-Fixture).
+STEAM_MARKET_LISTING = "https://steamcommunity.com/market/listings/{appid}/{name}"
+STEAM_ICON_CDN = "https://community.cloudflare.steamstatic.com/economy/image/{icon_hash}/128x128"
+_ICON_HASH_RE = re.compile(r"icon_url\W+([A-Za-z0-9_\-]{20,160})")
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+# Listing-Seite ist normal ~500KB, Icon-PNG ~24KB — beide Caps sind grosszuegig,
+# schuetzen aber vor einem MITM/kompromittierten Host oder Redirect, der uns
+# unbegrenzt viele Bytes ins RAM/auf die Platte schreiben laesst.
+MAX_LISTING_HTML_BYTES = 2 * 1024 * 1024
+MAX_ICON_BYTES = 1 * 1024 * 1024
+
+
+def icon_hash_from_listing_html(html: str) -> str | None:
+    """Extrahiert den Steam-CDN-Icon-Hash aus einer Market-Listing-Seite.
+
+    `\\W+` direkt nach "icon_url" traegt bewusst dazu bei, "icon_url_large"
+    NICHT zu treffen (das "_" davor ist ein Wortzeichen) — wir wollen die
+    kleine Variante, nicht die grosse.
+    """
+    m = _ICON_HASH_RE.search(html)
+    return m.group(1) if m else None
+
+
+def steam_market_icon_url(market_hash_name: str) -> str | None:
+    """Holt die Steam-CDN-Icon-URL fuer ein Item von dessen Market-Listing-Seite.
+
+    Gleiches Rate-Limit-Risiko wie steam_priceoverview() (siehe dort) —
+    Aufrufer muss selbst drosseln. Absichtlich NICHT in einen Scheduled Job
+    eingebaut: image_url ist laut init.sql manuell kuratiert, nicht
+    automatisch befuellt (wie `slot` — siehe Modul-Docstring).
+    """
+    url = STEAM_MARKET_LISTING.format(
+        appid=STEAM_APPID, name=urllib.parse.quote(market_hash_name, safe="")
+    )
+    try:
+        body = _http_get(url, {"User-Agent": _UA}, max_bytes=MAX_LISTING_HTML_BYTES)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
+        raise
+    icon_hash = icon_hash_from_listing_html(body.decode("utf-8", errors="ignore"))
+    if not icon_hash:
+        return None
+    return STEAM_ICON_CDN.format(icon_hash=icon_hash)
+
+
+SKIN_ICON_URL_PREFIX = "/skins/icons"  # servable path under STATIC_DIR
+
+
+def local_icon_filename(item_id: str) -> str:
+    """Kollisionsfreier, dateisystemsicherer Name aus einem item_id/Skin-Namen.
+
+    Skin-Namen enthalten Leerzeichen, Apostrophe und Unicode (z.B.
+    "BCHILLZ! Hoodie") — kein sicherer Dateiname ohne Hashing.
+    """
+    return hashlib.sha1(item_id.encode("utf-8")).hexdigest() + ".png"
+
+
+def download_skin_icon(cdn_url: str, dest_path: str) -> None:
+    """Speichert Icon-Bytes von Steams CDN lokal auf der eigenen Domain.
+
+    Noetig weil Steams CDN kein Access-Control-Allow-Origin schickt: ein
+    direkt vom Browser geladenes Steam-Icon scheitert im 3D-Viewer an CORS
+    (verifiziert 2026-09-14 gegen echten Chromium — die Textur laedt gar
+    nicht erst). Einmal lokal gespiegelt ist es same-origin und funktioniert.
+
+    Prueft die PNG-Magic-Bytes, bevor irgendwas auf die Platte geschrieben
+    wird — die Response kommt von aussen (Steam-CDN), nichts garantiert,
+    dass sie wirklich ein PNG ist, und die Datei wird spaeter unveraendert
+    an Browser ausgeliefert.
+    """
+    try:
+        body = _http_get(cdn_url, {"User-Agent": _UA}, max_bytes=MAX_ICON_BYTES)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
+        raise
+    if not body.startswith(_PNG_MAGIC):
+        raise ValueError(f"Antwort ist kein PNG (CDN-URL: {cdn_url})")
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    with open(dest_path, "wb") as f:
+        f.write(body)
+
+
+def enrich_skin_image_urls(
+    conn_ctx, icons_dir: str, sleep_sec: float = 3.0, limit: int | None = None
+) -> dict:
+    """Backfill fuer image_url — von Hand angestossen, kein Scheduled Job.
+
+    Nur Items mit gesetztem `slot` (die einzigen, die der 3D-Viewer ueberhaupt
+    zeigt) UND `image_url IS NULL` (idempotent: ein zweiter Lauf ueberschreibt
+    nichts und macht nur da weiter, wo der vorige aufgehoert hat). Holt die
+    Steam-CDN-URL, spiegelt die Bytes nach `icons_dir` (siehe
+    download_skin_icon fuer das CORS-Problem) und schreibt den lokalen,
+    same-origin servierbaren Pfad in image_url — nicht die rohe Steam-URL.
+    Bricht bei einem 429 sofort ab statt zu retryen — der Rest bleibt fuer
+    den naechsten Lauf offen.
+    """
+    with conn_ctx() as (conn, cur):
+        cur.execute(
+            "SELECT item_id FROM skin_items WHERE slot IS NOT NULL AND image_url IS NULL ORDER BY item_id"
+        )
+        item_ids = [r["item_id"] for r in cur.fetchall()]
+    if limit is not None:
+        item_ids = item_ids[:limit]
+
+    updated, failed = 0, 0
+    for item_id in item_ids:
+        try:
+            cdn_url = steam_market_icon_url(item_id)
+        except RuntimeError:
+            break  # 429 — sofort abbrechen, Rest bleibt fuer den naechsten Lauf offen
+        except Exception as e:
+            # Alles andere (404 fuer ein delistetes Item, Timeout, ...) darf
+            # NICHT den ganzen Lauf crashen: sonst blockiert eine einzelne
+            # kaputte Zeile wegen "ORDER BY item_id" + image_url IS NULL
+            # jeden weiteren Lauf an genau derselben Stelle.
+            print(f"[skin-icons] {item_id!r} -> ERROR {type(e).__name__}: {e}", flush=True)
+            failed += 1
+            time.sleep(sleep_sec)
+            continue
+        if not cdn_url:
+            failed += 1
+            time.sleep(sleep_sec)
+            continue
+
+        filename = local_icon_filename(item_id)
+        try:
+            download_skin_icon(cdn_url, os.path.join(icons_dir, filename))
+        except RuntimeError:
+            break  # 429 vom CDN — genauso abbrechen wie bei der Listing-Seite
+        except Exception as e:
+            print(f"[skin-icons] {item_id!r} -> ERROR {type(e).__name__}: {e}", flush=True)
+            failed += 1
+            time.sleep(sleep_sec)
+            continue
+
+        local_url = f"{SKIN_ICON_URL_PREFIX}/{filename}"
+        with conn_ctx() as (conn, cur):
+            cur.execute(
+                "UPDATE skin_items SET image_url = %s WHERE item_id = %s",
+                (local_url, item_id),
+            )
+        updated += 1
+        time.sleep(sleep_sec)
+    return {"updated": updated, "failed": failed, "remaining": len(item_ids) - updated - failed}

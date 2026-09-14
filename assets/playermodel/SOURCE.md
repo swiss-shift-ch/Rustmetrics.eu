@@ -15,11 +15,16 @@
   Split into 7 named sub-meshes with dedicated UV space and material each:
   `body_hoodie`, `body_pants`, `body_boots`, `head_mask`, `head_hat`,
   `back_backpack`, plus `body_skin` (hands/neck, not a slot). Exported to
-  `base_mesh.glb`. UVs are Smart-UV-Project islands (fine for flat
+  `static/playermodel/base_mesh.glb` (the app's HTTP server only serves
+  `static/`, not this `assets/` source directory — the `.blend` stays here
+  for editing, only the GLB export is web-servable). UVs are
+  Smart-UV-Project islands (fine for flat
   colors/baked textures, not laid out for hand-painting). Slot region
   boundaries are cut by face height and are jagged where no edge loop sits
   at that height — visible as a stepped hem on hoodie/pants and mask/hat.
   `back_backpack` is a synthetic offset shell, not real backpack geometry;
   replace with a proper CC0 pack mesh before final art pass.
-- **Next step:** wire `base_mesh.glb` into the browser 3D viewer (not yet
-  built — `static/` currently only has the flat item-list UI).
+- **3D viewer:** built 2026-09-14 — `static/skin-viewer.js` loads the GLB
+  (via vendored three.js in `static/vendor/three/`) and tints each slot
+  mesh to show which of the 6 outfit slots are filled. No per-skin
+  textures yet (`skin_items.image_url` is schema-ready but unpopulated).

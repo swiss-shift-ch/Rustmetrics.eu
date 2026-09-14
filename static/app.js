@@ -99,6 +99,8 @@
     skinsOutfitList:  $("#skins-outfit-list"),
     skinsOutfitCount: $("#skins-outfit-count"),
     skinsOutfitTotal: $("#skins-outfit-total"),
+    skinsViewerCanvas: $("#skins-viewer-canvas"),
+    skinsViewerHint:   $("#skins-viewer-hint"),
   };
 
   const fmt = {
@@ -182,6 +184,7 @@
     if (name === "skins" && !skinsFetched) {
       skinsFetched = true;
       loadSkinItems();
+      if (els.skinsViewerCanvas) window.SkinViewer?.init(els.skinsViewerCanvas, els.skinsViewerHint);
     }
     syncUrl(name, historyMode);
     try { localStorage.setItem(LS_PREFIX + "tab", name); } catch (e) {}
@@ -1733,7 +1736,16 @@
     }).join("");
   }
 
+  function outfitBySlot() {
+    const bySlot = {};
+    for (const item of skinsOutfit.values()) {
+      if (item.slot) bySlot[item.slot] = item;
+    }
+    return bySlot;
+  }
+
   function renderOutfit() {
+    window.SkinViewer?.setOutfit(outfitBySlot());
     if (!els.skinsOutfitList) return;
     const items = Array.from(skinsOutfit.values());
     els.skinsOutfitCount.textContent = `(${items.length})`;

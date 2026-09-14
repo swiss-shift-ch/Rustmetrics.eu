@@ -1352,14 +1352,14 @@ a.player-name.plink:hover {
   font-size: 11px;
   color: var(--text-muted);
 }
+.skins-legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .skins-legend-swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  margin-left: 4px;
+  flex: none;
 }
-.skins-legend-swatch:first-of-type { margin-left: 0; }
 .skins-legend-filled { background: var(--accent-bright); }
 .skins-legend-empty { background: #555555; }
 .skins-viewer-hint {

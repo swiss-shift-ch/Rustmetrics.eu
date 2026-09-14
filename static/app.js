@@ -1734,10 +1734,13 @@
       els.skinsItemList.innerHTML = '<div class="hint" style="padding:16px; text-align:center;">No items found.</div>';
       return;
     }
+    const bySlot = outfitBySlot();
     els.skinsItemList.innerHTML = matches.slice(0, 200).map(it => {
       const cheapest = cheapestPrice(it);
       const priceLabel = cheapest ? `${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)}` : "no price yet";
       const inOutfit = skinsOutfit.has(it.item_id);
+      const slotTaken = !inOutfit && it.slot && bySlot[it.slot];
+      const addLabel = inOutfit ? "Added" : slotTaken ? "Replace" : "+ Add";
       return `
         <div class="skins-item-row" data-item-id="${fmt.escape(it.item_id)}">
           ${skinItemIcon(it)}
@@ -1745,8 +1748,8 @@
             <span class="skins-item-name">${fmt.escape(it.name)}</span>
             <span class="skins-item-meta">${fmt.escape(it.raw_category || "uncategorized")} · ${priceLabel}</span>
           </div>
-          <button type="button" class="btn-ghost skins-item-add" ${inOutfit ? "disabled" : ""}>
-            ${inOutfit ? "Added" : "+ Add"}
+          <button type="button" class="btn-ghost skins-item-add" ${inOutfit ? "disabled" : ""} title="${slotTaken ? `Replaces ${fmt.escape(slotTaken.name)}` : ""}">
+            ${addLabel}
           </button>
         </div>`;
     }).join("");
@@ -1834,6 +1837,15 @@
     const itemId = row?.dataset.itemId;
     const item = skinsItems.find(it => it.item_id === itemId);
     if (!item || skinsOutfit.has(itemId)) return;
+    // Each outfit slot has exactly one 3D mesh (see SLOT_MESH in
+    // skin-viewer.js) — only one item can actually be "worn" per slot, so
+    // picking a new one for an already-filled slot replaces it rather than
+    // silently stacking (and billing for) items the viewer can't show.
+    if (item.slot) {
+      for (const [existingId, existingItem] of skinsOutfit) {
+        if (existingItem.slot === item.slot) skinsOutfit.delete(existingId);
+      }
+    }
     skinsOutfit.set(itemId, item);
     renderOutfit();
     renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");

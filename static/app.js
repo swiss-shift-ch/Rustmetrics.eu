@@ -18,7 +18,7 @@
   let currentTab     = "watchlist";
   let browseFetched  = false;
   let skinsFetched   = false;
-  const SKINS_ENABLED = false; // Skin Checker WIP — nav shows "Soon", block direct/saved access too
+  const SKINS_ENABLED = true;  // set false to hide the Skins tab again (nav "Soon" badge in index.html)
   let skinsItems     = [];   // cache of {item_id, name, slot, raw_category, prices}
   const skinsOutfit  = new Map(); // item_id -> item, preserves insertion order
   let me             = null;
@@ -102,6 +102,8 @@
     skinsOutfitList:  $("#skins-outfit-list"),
     skinsOutfitCount: $("#skins-outfit-count"),
     skinsOutfitClear: $("#skins-outfit-clear"),
+    skinsOutfitShare: $("#skins-outfit-share"),
+    skinsOutfitShareUrl: $("#skins-outfit-share-url"),
     skinsOutfitTotal: $("#skins-outfit-total"),
     skinsViewerCanvas: $("#skins-viewer-canvas"),
     skinsViewerHint:   $("#skins-viewer-hint"),
@@ -1718,8 +1720,11 @@
 
   let skinsSlot = ""; // "" = all slots, else one of hat|mask|hoodie|pants|boots|backpack
 
+  const SKIN_ICON_PREFIX = "/skins/icons/"; // same-origin mirror written by backfill_skin_icons.py
+
   function skinItemIcon(it, sizeClass = "") {
-    return it.image_url
+    const hasIcon = typeof it.image_url === "string" && it.image_url.startsWith(SKIN_ICON_PREFIX);
+    return hasIcon
       ? `<img class="skins-item-icon ${sizeClass}" src="${fmt.escape(it.image_url)}" alt="" loading="lazy" />`
       : `<svg class="skins-item-icon skins-item-icon-empty ${sizeClass}" aria-hidden="true"><use href="#icon-shirt"/></svg>`;
   }
@@ -1765,11 +1770,76 @@
     return bySlot;
   }
 
+  // ── Outfit persistence + share links ──
+  const OUTFIT_LS_KEY     = LS_PREFIX + "outfit";
+  const OUTFIT_URL_PARAM  = "outfit";
+  const OUTFIT_ID_SEP     = "|";   // item names can contain commas ("Salvaged Shirt, Coat and Tie")
+  const OUTFIT_MAX_ITEMS  = 6;     // one per slot
+  const SHARE_FEEDBACK_MS = 1600;
+  const CLIPBOARD_TIMEOUT_MS = 1500; // clipboard writes can hang without permission; fall back instead
+  const STEAM_MARKET_LISTING = "https://steamcommunity.com/market/listings/252490/";
+  // Read before syncUrl() rewrites the address bar to a bare /app.
+  const outfitIdsFromUrl = parseOutfitParam(new URLSearchParams(location.search).get(OUTFIT_URL_PARAM));
+
+  function parseOutfitParam(raw) {
+    if (typeof raw !== "string" || !raw) return [];
+    return raw.split(OUTFIT_ID_SEP).map(id => id.trim()).filter(Boolean).slice(0, OUTFIT_MAX_ITEMS);
+  }
+
+  function outfitShareUrl() {
+    const ids = Array.from(skinsOutfit.keys()).join(OUTFIT_ID_SEP);
+    return `${location.origin}/app?tab=skins&${OUTFIT_URL_PARAM}=${encodeURIComponent(ids)}`;
+  }
+
+  function saveOutfit() {
+    try { localStorage.setItem(OUTFIT_LS_KEY, JSON.stringify(Array.from(skinsOutfit.keys()))); } catch (e) {}
+  }
+
+  function savedOutfitIds() {
+    try {
+      const ids = JSON.parse(localStorage.getItem(OUTFIT_LS_KEY) || "[]");
+      return Array.isArray(ids) ? ids.filter(id => typeof id === "string").slice(0, OUTFIT_MAX_ITEMS) : [];
+    } catch (e) { return []; }
+  }
+
+  // Each outfit slot has exactly one 3D shell (see skin-viewer.js) — only
+  // one item can be "worn" per slot, so a new pick for a filled slot
+  // replaces the old one instead of silently stacking (and billing for)
+  // items the viewer can't show.
+  function addToOutfit(item) {
+    if (!item || skinsOutfit.has(item.item_id)) return;
+    if (item.slot) {
+      for (const [existingId, existingItem] of skinsOutfit) {
+        if (existingItem.slot === item.slot) skinsOutfit.delete(existingId);
+      }
+    }
+    skinsOutfit.set(item.item_id, item);
+  }
+
+  // Ids from a share link or localStorage: unknown ones (delisted items,
+  // hand-edited links) are skipped rather than failing the whole outfit.
+  function applyOutfitIds(ids) {
+    for (const id of ids) addToOutfit(skinsItems.find(it => it.item_id === id));
+  }
+
+  // Marketplace URLs come from third-party APIs (Skinport) via our DB: escape
+  // handles HTML, but only an http(s) allow-list stops a javascript: href.
+  function safeHttpUrl(url) {
+    return typeof url === "string" && /^https?:\/\//i.test(url) ? url : "#";
+  }
+
+  function steamMarketUrl(item) {
+    return STEAM_MARKET_LISTING + encodeURIComponent(item.item_id);
+  }
+
   function renderOutfit() {
     window.SkinViewer?.setOutfit(outfitBySlot());
     if (!els.skinsOutfitList) return;
     const items = Array.from(skinsOutfit.values());
     els.skinsOutfitCount.textContent = `(${items.length})`;
+    saveOutfit();
+    if (els.skinsOutfitShare) els.skinsOutfitShare.disabled = !items.length;
+    if (els.skinsOutfitShareUrl) els.skinsOutfitShareUrl.hidden = true;
     if (!items.length) {
       els.skinsOutfitList.innerHTML = '<p class="hint" style="padding:12px 0;">No items picked yet — click an item on the left to add it.</p>';
       els.skinsOutfitTotal.textContent = "€0.00";
@@ -1780,14 +1850,15 @@
       const cheapest = cheapestPrice(it);
       if (cheapest) total += cheapest.price;
       const priceLabel = cheapest
-        ? `<a href="${fmt.escape(cheapest.url || '#')}" target="_blank" rel="noopener noreferrer">${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)} (${fmt.escape(cheapest.platform)})</a>`
+        ? `<a href="${fmt.escape(safeHttpUrl(cheapest.url))}" target="_blank" rel="noopener noreferrer">${fmt.escape(cheapest.currency)} ${cheapest.price.toFixed(2)} (${fmt.escape(cheapest.platform)})</a>`
         : "no price yet";
+      const steamLink = `<a href="${fmt.escape(steamMarketUrl(it))}" target="_blank" rel="noopener noreferrer" title="Check the Steam Community Market listing">Steam</a>`;
       return `
         <div class="skins-outfit-row" data-item-id="${fmt.escape(it.item_id)}">
           ${skinItemIcon(it, "skins-item-icon-sm")}
           <div class="skins-item-info">
             <span class="skins-item-name">${fmt.escape(it.name)}</span>
-            <span class="skins-item-meta">${priceLabel}</span>
+            <span class="skins-item-meta">${priceLabel} · ${steamLink}</span>
           </div>
           <button type="button" class="btn-ghost skins-item-remove" title="Remove"><svg class="icon-inline" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </div>`;
@@ -1799,7 +1870,10 @@
     if (!els.skinsItemList) return;
     try {
       const data = await api("/api/skins/items");
-      skinsItems = data.items || [];
+      skinsItems = Array.isArray(data.items) ? data.items : [];
+      // A share link wins over whatever this browser last had picked.
+      applyOutfitIds(outfitIdsFromUrl.length ? outfitIdsFromUrl : savedOutfitIds());
+      renderOutfit();
       renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
     } catch (e) {
       els.skinsItemList.innerHTML =
@@ -1824,6 +1898,24 @@
     renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
   });
 
+  els.skinsOutfitShare?.addEventListener("click", async () => {
+    if (!skinsOutfit.size || !els.skinsOutfitShare) return;
+    const url = outfitShareUrl();
+    const label = els.skinsOutfitShare.textContent;
+    try {
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("clipboard timeout")), CLIPBOARD_TIMEOUT_MS));
+      await Promise.race([navigator.clipboard.writeText(url), timeout]);
+      els.skinsOutfitShare.textContent = "Copied!";
+      setTimeout(() => { els.skinsOutfitShare.textContent = label; }, SHARE_FEEDBACK_MS);
+    } catch (e) {
+      // Clipboard blocked (permissions, insecure context) — show the link so it can be copied by hand.
+      if (els.skinsOutfitShareUrl) {
+        els.skinsOutfitShareUrl.textContent = url;
+        els.skinsOutfitShareUrl.hidden = false;
+      }
+    }
+  });
+
   els.skinsViewerRotate?.addEventListener("click", () => {
     const on = window.SkinViewer?.toggleAutoRotate();
     els.skinsViewerRotate.classList.toggle("is-active", Boolean(on));
@@ -1839,16 +1931,7 @@
     const itemId = row?.dataset.itemId;
     const item = skinsItems.find(it => it.item_id === itemId);
     if (!item || skinsOutfit.has(itemId)) return;
-    // Each outfit slot has exactly one 3D mesh (see SLOT_MESH in
-    // skin-viewer.js) — only one item can actually be "worn" per slot, so
-    // picking a new one for an already-filled slot replaces it rather than
-    // silently stacking (and billing for) items the viewer can't show.
-    if (item.slot) {
-      for (const [existingId, existingItem] of skinsOutfit) {
-        if (existingItem.slot === item.slot) skinsOutfit.delete(existingId);
-      }
-    }
-    skinsOutfit.set(itemId, item);
+    addToOutfit(item);
     renderOutfit();
     renderSkinItemList(els.skinsSearch ? els.skinsSearch.value : "");
   });
@@ -1882,6 +1965,11 @@
   setNotifBtn();
   (async () => {
     await loadMe();
+    // initialTab's switchTab() (below) can run before this resolves — if it
+    // landed on mystats while `me` was still null, isAuthed() read false and
+    // rendered the guest CTA even for a logged-in user. Re-check now that
+    // auth state is actually known.
+    if (currentTab === "mystats") loadMyStats();
     loadServers();
     loadFriends();
     setInterval(loadServers, REFRESH_MS);

@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - nur relevant wenn Dependency fehlt
     brotli = None
 
 from rm_config import _env
-from rm_skin_slots import slot_for_name
+from rm_skin_slots import slot_for_item
 
 STEAM_APPID = 252490  # Rust auf Steam
 SKINPORT_API = "https://api.skinport.com/v1/items"
@@ -124,6 +124,28 @@ def category_from_market_page(market_page: str | None) -> str | None:
     return None
 
 
+def base_item_from_market_page(market_page: str | None) -> str | None:
+    """Extrahiert das Basis-Item-Slug-Segment aus einer Skinport-market_page-URL.
+
+    z.B. "https://skinport.com/rust/market/clothing/roadsign-kilt?item=..."
+    -> "roadsign-kilt". Das ist Skinports EIGENE Klassifikation, welches
+    Vanilla-Rust-Item ein Skin darstellt -- siehe rm_skin_slots.slot_for_slug()
+    fuer die weitere Verwendung. Liefert None, wenn das Format nicht passt
+    (lieber None als ein geratener Slug), analog zu category_from_market_page().
+    """
+    if not market_page:
+        return None
+    try:
+        path = urllib.parse.urlparse(market_page).path
+        parts = [p for p in path.split("/") if p]
+        # erwartet: ["rust", "market", "<category>", "<slug>"]
+        if len(parts) >= 4 and parts[0] == "rust" and parts[1] == "market":
+            return parts[3]
+    except Exception:
+        pass
+    return None
+
+
 def skinport_item_to_row(item: dict) -> dict | None:
     """Wandelt einen Skinport-API-Eintrag in unser DB-Zeilenformat.
 
@@ -138,6 +160,7 @@ def skinport_item_to_row(item: dict) -> dict | None:
         "item_id": name,
         "name": name,
         "raw_category": category_from_market_page(item.get("market_page")),
+        "base_item": base_item_from_market_page(item.get("market_page")),
         "platform": "skinport",
         "price": float(price) if price is not None else None,
         "currency": item.get("currency") or "EUR",
@@ -161,7 +184,7 @@ def refresh_skin_prices(conn_ctx) -> int:
         for row in rows:
             # skin_items: neue Items anlegen, bestehende NICHT ueberschreiben
             # bei slot/image_url/texture_ref (das ist kuratiert von Hand).
-            slot = slot_for_name(row["name"])
+            slot = slot_for_item(row["name"], row["base_item"])
             cur.execute(
                 """
                 INSERT INTO skin_items (item_id, name, raw_category, slot, created_at)

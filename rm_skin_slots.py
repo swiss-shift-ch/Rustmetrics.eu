@@ -44,8 +44,10 @@ SLOT_MAP: dict[str, str] = {
     "Roadsign Kilt":       "pants",
     "Boots":               "boots",
     "Hide Boots":          "boots",
-    "Leather Gloves":      "hoodie",  # kein eigener Handschuh-Slot -> torso
-    "Tactical Gloves":     "hoodie",
+    # Handschuhe (Leather/Tactical Gloves) bewusst NICHT gemappt: es gibt
+    # keinen eigenen Handschuh-Slot im Viewer, und ein Mapping auf hoodie
+    # wuerde im Outfit-Builder den Hoodie des Traegers ersetzen -- das
+    # waere falsch.
     "Small Backpack":      "backpack",
     "Large Backpack":      "backpack",
     "Road Sign Jacket":    "hoodie",
@@ -68,3 +70,81 @@ def slot_for_name(market_hash_name: str) -> str | None:
         if base_name.lower() in lname:
             return slot
     return None
+
+
+# Slug ist das 4. Pfadsegment einer Skinport-market_page-URL (siehe
+# rm_skins.base_item_from_market_page()), z.B. ".../clothing/roadsign-kilt"
+# -> "roadsign-kilt". Das ist Skinports EIGENE Zuordnung, welches Vanilla-
+# Rust-Item ein Skin darstellt -- deutlich zuverlaessiger als Teilstring-
+# Matching auf den (oft irrefuehrenden) Skin-Namen, siehe slot_for_item().
+#
+# Handschuh-Slugs (burlap-gloves, tactical-gloves) und satchel-explosives
+# (von Skinport unter "clothing" einsortiert, aber nicht tragbar) sind
+# bewusst NICHT gelistet -> slot_for_slug() gibt fuer sie None zurueck.
+SLUG_SLOT_MAP: dict[str, str] = {
+    # hoodie
+    "hoodie":              "hoodie",
+    "jacket":              "hoodie",
+    "snow-jacket":         "hoodie",
+    "roadsign-jacket":     "hoodie",
+    "metal-torso-plate":   "hoodie",
+    "hide-poncho":         "hoodie",
+    "burlap-shirt":        "hoodie",
+    "tshirt":              "hoodie",
+    "long-tshirt":         "hoodie",
+    "collared-shirt":      "hoodie",
+    "tank-top":            "hoodie",
+    "hide-halterneck":     "hoodie",
+    # pants
+    "pants":               "pants",
+    "shorts":              "pants",
+    "roadsign-kilt":       "pants",
+    "hide-skirt":          "pants",
+    "hide-pants":          "pants",
+    "burlap-trousers":     "pants",
+    # boots
+    "boots":               "boots",
+    "burlap-shoes":        "boots",
+    # mask
+    "metal-facemask":      "mask",
+    "bandana":             "mask",
+    "balaclava":           "mask",
+    "deer-skull-mask":     "mask",
+    # hat
+    "coffeecan-helmet":    "hat",
+    "bucket-helmet":       "hat",
+    "rifle-helmet":        "hat",
+    "boonie":              "hat",
+    "cap":                 "hat",
+    "beenie":              "hat",
+    "miner-s-hat":         "hat",
+    "burlap-headwrap":     "hat",
+}
+
+
+def slot_for_slug(slug: str | None) -> str | None:
+    """Findet den kuratierten Slot fuer Skinports Basis-Item-Slug (exakt).
+
+    Anders als slot_for_name() kein Teilstring-Match: der Slug IST bereits
+    das Basisitem, kein Skin-Name mit Praefix/Suffix drumherum. Gibt None
+    zurueck bei leerem/unbekanntem Slug (z.B. Handschuhe, satchel-explosives
+    -- siehe SLUG_SLOT_MAP-Kommentar).
+    """
+    if not slug:
+        return None
+    return SLUG_SLOT_MAP.get(slug.lower())
+
+
+def slot_for_item(name: str | None, base_item: str | None) -> str | None:
+    """Findet den kuratierten Slot: Slug zuerst (evidenzbasiert), sonst Name.
+
+    Der Skinport-Slug ist Skinports eigene Klassifikation und damit
+    zuverlaessiger als Teilstring-Matching auf den (teils irrefuehrenden)
+    Skin-Namen -- siehe Modul-Docstring. Fallback auf slot_for_name() bleibt
+    noetig fuer Items ohne clothing/armor-Slug (z.B. Backpacks, Hazmat
+    Suit), die nicht in SLUG_SLOT_MAP vorkommen.
+    """
+    slot = slot_for_slug(base_item)
+    if slot is not None:
+        return slot
+    return slot_for_name(name)

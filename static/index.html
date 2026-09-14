@@ -53,7 +53,7 @@
 
 <!-- TODO: Google-Search-Console Meta-Tag hier einfügen wenn vorhanden -->
 
-<link rel="stylesheet" href="/style.css?v=20260914h" />
+<link rel="stylesheet" href="/style.css?v=20260914i" />
 </head>
 <body>
 
@@ -174,10 +174,9 @@
       <svg class="nav-icon" aria-hidden="true"><use href="#icon-bars"/></svg>
       <span class="nav-label">My Stats</span>
     </button>
-    <button class="nav-item is-disabled" data-tab="skins" aria-label="Skin Checker — coming soon" title="Skin Checker — coming soon" aria-disabled="true" disabled>
+    <button class="nav-item" data-tab="skins" aria-label="Skin Checker" title="Skin Checker">
       <svg class="nav-icon" aria-hidden="true"><use href="#icon-shirt"/></svg>
       <span class="nav-label">Skins</span>
-      <span class="nav-soon">Soon</span>
     </button>
     <button class="nav-item" data-tab="play" title="Mini-game — Rust Flap" aria-label="Play Rust Flap">
       <svg class="nav-icon" aria-hidden="true"><use href="#icon-play"/></svg>
@@ -378,9 +377,9 @@
       <header class="view-header">
         <h2 class="view-title">Outfit Builder</h2>
         <p class="view-sub">Pick real Rust skins and compare prices across marketplaces. The 3D preview
-          is <strong>not</strong> the real skin art — it just highlights which of the 6 outfit slots
-          you've filled (orange = filled, grey = empty). See the item's own icon in the lists for what
-          it actually looks like.</p>
+          dresses a stand-in body in each skin's icon colours with the icon printed on the front —
+          it is <strong>not</strong> the in-game skin art. See the item's own icon in the lists for
+          what it actually looks like.</p>
       </header>
 
       <div class="skins-layout">
@@ -417,17 +416,19 @@
             <div id="skins-viewer-hint" class="skins-viewer-hint">Loading 3D preview…</div>
           </div>
           <p class="skins-viewer-legend">
-            <span class="skins-legend-item"><span class="skins-legend-swatch skins-legend-filled"></span>Slot filled</span>
-            <span class="skins-legend-item"><span class="skins-legend-swatch skins-legend-empty"></span>Slot empty</span>
-            <span class="hint">— not the real skin art, see item icons for that</span>
+            <span class="hint">Colours and print come from each item's icon — a stand-in, not the real in-game skin art.</span>
           </p>
         </div>
 
         <aside class="skins-outfit">
           <div class="skins-outfit-head">
             <h3>Your outfit <span id="skins-outfit-count" class="hint">(0)</span></h3>
-            <button type="button" id="skins-outfit-clear" class="btn-ghost" title="Remove all items">Clear</button>
+            <div class="skins-outfit-actions">
+              <button type="button" id="skins-outfit-share" class="btn-ghost" title="Copy a link to this outfit" disabled>Copy link</button>
+              <button type="button" id="skins-outfit-clear" class="btn-ghost" title="Remove all items">Clear</button>
+            </div>
           </div>
+          <p id="skins-outfit-share-url" class="hint skins-outfit-share-url" hidden></p>
           <div id="skins-outfit-list" class="skins-outfit-list">
             <p class="hint" style="padding:12px 0;">No items picked yet — click an item on the left to add it.</p>
           </div>
@@ -613,7 +614,10 @@
 <script src="/vendor/three/three.min.js"></script>
 <script src="/vendor/three/GLTFLoader.js"></script>
 <script src="/vendor/three/OrbitControls.js"></script>
-<script src="/skin-viewer.js?v=20260914h"></script>
-<script src="/app.js?v=20260914h"></script>
+<script src="/skin-shell-math.js?v=20260914i"></script>
+<script src="/skin-shells.js?v=20260914i"></script>
+<script src="/skin-icon-texture.js?v=20260914i"></script>
+<script src="/skin-viewer.js?v=20260914i"></script>
+<script src="/app.js?v=20260914i"></script>
 </body>
 </html>

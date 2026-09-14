@@ -1379,16 +1379,6 @@ a.player-name.plink:hover {
   font-size: 11px;
   color: var(--text-muted);
 }
-.skins-legend-item { display: inline-flex; align-items: center; gap: 5px; }
-.skins-legend-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex: none;
-}
-.skins-legend-filled { background: var(--accent-bright); }
-.skins-legend-empty { background: #555555; }
 .skins-viewer-hint {
   position: absolute;
   left: 0; right: 0; bottom: 0;
@@ -1454,6 +1444,10 @@ svg.skins-item-icon-empty { padding: 8px; color: var(--text-dim); }
 .skins-outfit-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .skins-outfit-head h3 { margin: 0; font-size: 13px; color: var(--text); }
 .skins-outfit-head .btn-ghost { padding: 3px 10px; font-size: 11px; }
+.skins-outfit-actions { display: flex; gap: 6px; }
+.skins-outfit-share-url { font-size: 11px; word-break: break-all; margin: 0 0 8px; user-select: all; }
+.skins-item-meta a { color: var(--text-muted); text-decoration: underline dotted; }
+.skins-item-meta a:hover { color: var(--accent-bright); }
 .skins-outfit-list { display: flex; flex-direction: column; gap: 6px; }
 .skins-outfit-row .skins-item-info { flex: 1 1 auto; }
 .skins-outfit-row .skins-item-remove { padding: 4px 6px; flex: none; }

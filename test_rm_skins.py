@@ -1,8 +1,10 @@
 """Tests fuer rm_skins.py — reine Parsing/Mapping-Logik, kein Netzwerk/DB."""
 from __future__ import annotations
 
+import rm_skins
 from rm_skins import (
     STEAM_ICON_CDN,
+    base_item_from_market_page,
     category_from_market_page,
     icon_hash_from_listing_html,
     local_icon_filename,
@@ -36,6 +38,21 @@ class TestCategoryFromMarketPage:
         assert category_from_market_page("not a url at all::::") is None
 
 
+class TestBaseItemFromMarketPage:
+    def test_extracts_slug_segment_from_valid_url(self):
+        url = "https://skinport.com/rust/market/clothing/roadsign-kilt?item=Plywood%20Kilt"
+        assert base_item_from_market_page(url) == "roadsign-kilt"
+
+    def test_returns_none_for_none_input(self):
+        assert base_item_from_market_page(None) is None
+
+    def test_returns_none_for_url_with_too_few_path_segments(self):
+        assert base_item_from_market_page("https://skinport.com/rust/market/clothing") is None
+
+    def test_returns_none_for_malformed_url(self):
+        assert base_item_from_market_page("not a url at all::::") is None
+
+
 class TestSkinportItemToRow:
     def test_maps_full_item_to_row(self):
         item = {
@@ -51,6 +68,7 @@ class TestSkinportItemToRow:
             "item_id": "Plywood Kilt",
             "name": "Plywood Kilt",
             "raw_category": "clothing",
+            "base_item": "roadsign-kilt",
             "platform": "skinport",
             "price": 4.96,
             "currency": "EUR",
@@ -142,3 +160,50 @@ class TestLocalIconFilename:
 
     def test_different_names_produce_different_filenames(self):
         assert local_icon_filename("Stalker Hoodie") != local_icon_filename("Stalker Pants")
+
+
+class _FakeCursor:
+    def __init__(self):
+        self.executed = []
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+
+
+class _FakeConn:
+    """Mimics rm_db._Conn's Shape: `with conn_ctx() as (conn, cur):`."""
+
+    def __init__(self):
+        self.cursor = _FakeCursor()
+
+    def __enter__(self):
+        return (self, self.cursor)
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestRefreshSkinPrices:
+    def test_passes_slug_derived_slot_into_skin_items_insert(self, monkeypatch):
+        # "Ornate Vest" would be unmapped by name-only matching, but its
+        # base-item slug ("roadsign-jacket") is authoritative and known.
+        raw_items = [
+            {
+                "market_hash_name": "Ornate Vest",
+                "min_price": 12.5,
+                "market_page": "https://skinport.com/rust/market/clothing/roadsign-jacket?item=Ornate%20Vest",
+                "quantity": 3,
+            }
+        ]
+        monkeypatch.setattr(rm_skins, "fetch_skinport_items", lambda: raw_items)
+        conn = _FakeConn()
+
+        updated = rm_skins.refresh_skin_prices(lambda: conn)
+
+        assert updated == 1
+        insert_calls = [
+            params for sql, params in conn.cursor.executed if sql.strip().startswith("INSERT INTO skin_items")
+        ]
+        assert len(insert_calls) == 1
+        item_id, name, raw_category, slot, _created_at = insert_calls[0]
+        assert (item_id, name, raw_category, slot) == ("Ornate Vest", "Ornate Vest", "clothing", "hoodie")

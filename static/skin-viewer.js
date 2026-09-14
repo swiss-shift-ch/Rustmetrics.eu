@@ -1,121 +1,152 @@
 /* RustMetrics — Skin Checker 3D outfit preview.
-   Loads the rigged/UV-split playermodel GLB and highlights which of the
-   6 outfit slots are currently filled (orange = filled, gray = empty).
-   Deliberately NOT texturing the mesh with real skin icons: base_mesh's
-   UV islands are Smart-UV-Project auto-generated, not hand-unwrapped, so
-   projecting a small square item-icon photo across them fragments into
-   disconnected, mismatched patches per island (e.g. a mottled torso next
-   to a flat black sleeve) — tried it, looked worse than a plain tint.
-   Real icons are shown as flat 2D thumbnails in the item/outfit lists
-   instead (see app.js), where they render correctly. Vanilla JS, no
-   build step. Depends on
-   /vendor/three/{three.min.js,GLTFLoader.js,OrbitControls.js} being
-   loaded first (see index.html).
-*/
+   Loads the rigged playermodel GLB and dresses it per outfit slot.
+   Garments are NOT modelled in the GLB: each slot's shell is built at
+   runtime from the body pieces it covers (skin-shells.js), tinted with
+   the picked skin's icon colour and printed with the icon on its front
+   (skin-icon-texture.js). That is an honest stand-in — Rust's real skin
+   textures are Facepunch's, so this never claims to be the in-game art.
+   Vanilla JS, no build step. Load order (see index.html):
+   three.min.js, GLTFLoader.js, OrbitControls.js, skin-shell-math.js,
+   skin-shells.js, skin-icon-texture.js, then this file. */
 (() => {
   "use strict";
 
   const MODEL_URL = "/playermodel/base_mesh.glb";
 
-  // outfit slot -> mesh name inside base_mesh.glb (see assets/playermodel/SOURCE.md)
-  const SLOT_MESH = {
-    hoodie:   "body_hoodie",
-    pants:    "body_pants",
-    boots:    "body_boots",
-    mask:     "head_mask",
-    hat:      "head_hat",
-    backpack: "back_backpack",
+  // Body pieces from the CC4 export (names verified against the GLB, see
+  // assets/playermodel/SOURCE.md). Hands sit at y<1.04, |x|>0.40 in the
+  // arms-down bind pose — a hoodie's sleeves stop at the wrist, so those
+  // triangles are cut out of the hoodie shell.
+  const HAND_MAX_Y = 1.04;
+  const HAND_MIN_ABS_X = 0.40;
+  const HAT_MIN_Y = 1.67;      // above the hairline
+  const MASK_MIN_Y = 1.49;     // chin
+  const MASK_MIN_Z = -0.03;    // front half of the head only
+  const BOOT_MAX_Y = 0.30;     // ankle-high boots: feet plus the bottom of the shins
+  const SHELL_INFLATE = 0.006; // metres; enough to clear the skin without floating
+  const BOOT_INFLATE = 0.010;  // boots sit outside the pants shell at the ankle
+
+  const SLOT_SHELLS = {
+    hoodie: {
+      sources: ["torso_full", "arms_shoulders_hands"],
+      keepVertex: (x, y) => !(y < HAND_MAX_Y && Math.abs(x) > HAND_MIN_ABS_X),
+      print: { width: 0.50, v0: 0.04, v1: 0.98 },
+    },
+    pants: {
+      sources: ["underwear", "legs_upper_lower_tummy"],
+      print: { width: 0.60, v0: 0.03, v1: 0.98 },
+    },
+    boots: {
+      sources: ["feet", "legs_upper_lower_tummy"],
+      keepVertex: (x, y) => y < BOOT_MAX_Y,
+      inflate: BOOT_INFLATE,
+      print: { width: 0.50, v0: 0.08, v1: 0.95 },
+    },
+    hat: {
+      sources: ["head"],
+      keepVertex: (x, y) => y >= HAT_MIN_Y,
+      print: { width: 0.50, v0: 0.05, v1: 0.95 },
+    },
+    mask: {
+      sources: ["head"],
+      keepVertex: (x, y, z) => y >= MASK_MIN_Y && y < HAT_MIN_Y && z > MASK_MIN_Z,
+      print: { width: 0.55, v0: 0.05, v1: 0.95 },
+    },
+    backpack: {
+      backpack: true,
+      print: { width: 0.60, v0: 0.10, v1: 0.90 },
+    },
   };
 
-  // Dedicated, cleanly-UV'd overlay mesh per slot for real icon texturing —
-  // separate names from SLOT_MESH on purpose. Today's base_mesh.glb has none
-  // of these, so scene.getObjectByName() returns null and every slot falls
-  // straight back to the plain tint on SLOT_MESH, unchanged. Once
-  // base_mesh.blend adds one of these per slot (see assets/playermodel/
-  // SOURCE.md — clean non-overlapping UV, sized for one square item icon),
-  // it lights up automatically with no further code changes.
-  const SLOT_TEXTURE_MESH = {
-    hoodie:   "skin_hoodie",
-    pants:    "skin_pants",
-    boots:    "skin_boots",
-    mask:     "skin_mask",
-    hat:      "skin_hat",
-    backpack: "skin_backpack",
-  };
+  // Placeholder slot meshes from the old CC0 body — superseded by the
+  // runtime shells, kept in the GLB only so older exports still load.
+  const LEGACY_HIDDEN = ["body_hoodie", "body_pants", "body_boots", "head_hat", "head_mask", "back_backpack"];
+  // CC4 alternates that duplicate other pieces (z-fight when all shown).
+  const DUPLICATE_HIDDEN = ["hands_gloves", "torso_tshirt", "torso_long_shirt", "legs_upper_lower"];
 
-  // Body meshes to hide (clipping-prevention) once a slot is filled — same
-  // "doesn't exist yet, safe no-op" story as SLOT_TEXTURE_MESH.
-  const SLOT_HIDE_MESHES = {
-    hoodie:   ["arms_shoulders_hands", "torso_tshirt"],
-    pants:    ["legs_upper_lower", "underwear"],
-    boots:    ["feet"],
-    mask:     [],
-    hat:      [],
-    backpack: [],
-  };
-
-  const textureLoader = typeof THREE !== "undefined" ? new THREE.TextureLoader() : null;
-  const textureCache = new Map(); // image_url -> THREE.Texture
-
-  function loadIconTexture(url) {
-    if (!textureLoader || !url) return null;
-    if (textureCache.has(url)) return textureCache.get(url);
-    const tex = textureLoader.load(url);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    textureCache.set(url, tex);
-    return tex;
-  }
-
-  const COLOR_EMPTY  = 0x555555; // slot not equipped
-  const COLOR_FILLED = 0xe85a3e; // var(--accent-bright) — slot has an item
-  const COLOR_SKIN   = 0xc79b74; // body_skin, not an outfit slot
-  const COLOR_BG     = 0x1d1d1d; // var(--bg-elevated)
-
-  const CAMERA_START = { x: 1.8, y: 1.5, z: 2.4 };
-  const TARGET_START = { x: 0, y: 0.95, z: 0 };
+  const COLOR_LOADING = 0x6b6b6b; // shell tint while the icon is still loading
+  const COLOR_BG      = 0x1d1d1d; // var(--bg-elevated)
+  const CAMERA_START  = { x: 1.8, y: 1.5, z: 2.4 };
+  const TARGET_START  = { x: 0, y: 0.95, z: 0 };
 
   let renderer = null;
   let scene = null;
   let camera = null;
   let controls = null;
-  let slotMeshes = {};      // slot name -> THREE.Mesh (plain tint, always present today)
-  let textureMeshes = {};   // slot name -> THREE.Mesh (dedicated UV overlay, future-only)
+  let shells = {};           // slot -> THREE.Mesh
   let ready = false;
   let pendingOutfit = null;
+  const slotToken = {};      // slot -> counter, drops stale async icon loads
+  const dressedItemId = {};  // slot -> item_id currently worn (null = bare)
 
-  function applySlotState(slot, item) {
-    const isFilled = Boolean(item);
-    const tintMesh = slotMeshes[slot];
-    const texMesh = textureMeshes[slot];
-    const tex = texMesh && isFilled ? loadIconTexture(item.image_url) : null;
-    const showTex = Boolean(tex);
+  function findMeshes(root, names) {
+    // Not getObjectByName(): bones and meshes can share a name ("head").
+    const byName = new Map();
+    root.traverse((o) => { if (o.isMesh && !byName.has(o.name)) byName.set(o.name, o); });
+    return names.map((n) => byName.get(n)).filter(Boolean);
+  }
 
-    if (tintMesh && tintMesh.material) {
-      tintMesh.visible = !showTex;
-      tintMesh.material.color.setHex(isFilled ? COLOR_FILLED : COLOR_EMPTY);
-      tintMesh.material.emissive?.setHex(isFilled ? COLOR_FILLED : 0x000000);
-      tintMesh.material.emissiveIntensity = isFilled ? 0.15 : 0;
+  function buildShells(root) {
+    const out = {};
+    for (const [slot, spec] of Object.entries(SLOT_SHELLS)) {
+      const mesh = spec.backpack
+        ? window.SkinShells.buildBackpack()
+        : window.SkinShells.buildShell({
+            sources: findMeshes(root, spec.sources),
+            inflate: spec.inflate || SHELL_INFLATE,
+            keepVertex: spec.keepVertex,
+            facing: 1,
+          });
+      if (!mesh) continue;
+      mesh.name = `shell_${slot}`;
+      mesh.visible = false;
+      (spec.backpack ? root : findMeshes(root, spec.sources)[0].parent).add(mesh);
+      out[slot] = mesh;
     }
+    return out;
+  }
 
-    if (texMesh) {
-      texMesh.visible = showTex;
-      if (showTex && texMesh.material) {
-        texMesh.material.map = tex;
-        texMesh.material.color.setHex(0xffffff);
-        texMesh.material.needsUpdate = true;
-      }
-    }
+  function hideByName(root, names) {
+    for (const mesh of findMeshes(root, names)) mesh.visible = false;
+  }
 
-    for (const name of SLOT_HIDE_MESHES[slot] || []) {
-      const hideMesh = scene?.getObjectByName(name);
-      if (hideMesh) hideMesh.visible = !isFilled;
+  function disposeMap(material) {
+    if (material.map) { material.map.dispose(); material.map = null; }
+  }
+
+  async function dressSlot(slot, item) {
+    const shell = shells[slot];
+    if (!shell) return;
+    // setOutfit() re-sends the whole outfit on every change; re-dressing an
+    // unchanged slot would flash it grey and rebuild its texture for nothing.
+    const nextId = item ? item.item_id : null;
+    if (dressedItemId[slot] === nextId) return;
+    dressedItemId[slot] = nextId;
+    const token = (slotToken[slot] = (slotToken[slot] || 0) + 1);
+    if (!item) {
+      shell.visible = false;
+      disposeMap(shell.material);
+      return;
     }
+    shell.visible = true;
+    disposeMap(shell.material);
+    shell.material.color.setHex(COLOR_LOADING);
+    shell.material.needsUpdate = true;
+
+    const img = await window.SkinIconTexture.loadIcon(item.image_url);
+    if (slotToken[slot] !== token) return; // slot changed while loading
+    if (!img) return;                      // no icon → plain tint stays
+    const tint = window.SkinIconTexture.dominantColor(img);
+    const tintCss = `#${tint.clone().convertLinearToSRGB().getHexString()}`;
+    shell.material.color.copy(tint);
+    shell.material.map = window.SkinIconTexture.buildTexture(img, tintCss, SLOT_SHELLS[slot].print);
+    shell.material.needsUpdate = true;
   }
 
   function setOutfit(outfitBySlot) {
     if (!ready) { pendingOutfit = outfitBySlot; return; }
-    for (const slot of Object.keys(SLOT_MESH)) {
-      applySlotState(slot, outfitBySlot && outfitBySlot[slot]);
+    for (const slot of Object.keys(SLOT_SHELLS)) {
+      dressSlot(slot, outfitBySlot && outfitBySlot[slot]);
     }
   }
 
@@ -134,6 +165,17 @@
     renderer.render(scene, camera);
   }
 
+  function onModelLoaded(gltf, hintEl) {
+    scene.add(gltf.scene);
+    hideByName(gltf.scene, LEGACY_HIDDEN);
+    hideByName(gltf.scene, DUPLICATE_HIDDEN);
+    shells = buildShells(gltf.scene);
+    ready = true;
+    setOutfit(pendingOutfit || {});
+    pendingOutfit = null;
+    if (hintEl) hintEl.textContent = "Drag to rotate · scroll to zoom";
+  }
+
   /**
    * Boots the 3D viewer into `canvas`. Safe to call once; later calls are
    * no-ops. Loading/render errors are logged to the panel's hint element
@@ -143,6 +185,10 @@
    */
   function init(canvas, hintEl) {
     if (renderer || !canvas || typeof THREE === "undefined") return;
+    if (!window.SkinShells || !window.SkinIconTexture || !window.SkinShellMath) {
+      if (hintEl) hintEl.textContent = "Couldn't load 3D preview.";
+      return;
+    }
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(COLOR_BG);
@@ -152,6 +198,7 @@
 
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding; // GLB colour maps are sRGB-tagged
     onResize(canvas);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 1.1));
@@ -168,34 +215,17 @@
     controls.autoRotateSpeed = 1.4;
     controls.update();
 
-    const loader = new THREE.GLTFLoader();
-    loader.load(
+    new THREE.GLTFLoader().load(
       MODEL_URL,
       (gltf) => {
-        scene.add(gltf.scene);
-        slotMeshes = {};
-        textureMeshes = {};
-        gltf.scene.traverse((obj) => {
-          if (!obj.isMesh) return;
-          for (const [slot, meshName] of Object.entries(SLOT_MESH)) {
-            if (obj.name === meshName) slotMeshes[slot] = obj;
-          }
-          for (const [slot, meshName] of Object.entries(SLOT_TEXTURE_MESH)) {
-            if (obj.name === meshName) { textureMeshes[slot] = obj; obj.visible = false; }
-          }
-          if (obj.name === "body_skin" && obj.material) {
-            obj.material.color.setHex(COLOR_SKIN);
-          }
-        });
-        ready = true;
-        if (pendingOutfit !== null) { setOutfit(pendingOutfit); pendingOutfit = null; }
-        else setOutfit({});
-        if (hintEl) hintEl.textContent = "Drag to rotate · scroll to zoom";
+        try { onModelLoaded(gltf, hintEl); }
+        catch (e) {
+          console.error("[skin-viewer] shell build failed", e);
+          if (hintEl) hintEl.textContent = "Couldn't build 3D preview.";
+        }
       },
       undefined,
-      (err) => {
-        if (hintEl) hintEl.textContent = "Couldn't load 3D preview.";
-      }
+      () => { if (hintEl) hintEl.textContent = "Couldn't load 3D preview."; }
     );
 
     window.addEventListener("resize", () => onResize(canvas));
@@ -215,5 +245,5 @@
     controls.update();
   }
 
-  window.SkinViewer = { init, setOutfit, toggleAutoRotate, resetCamera };
+  window.SkinViewer = { init, setOutfit, toggleAutoRotate, resetCamera, _scene: () => scene };
 })();

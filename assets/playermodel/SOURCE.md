@@ -95,3 +95,25 @@
   slot meshes tightly to the new body shape, and the hand-unwrapped
   `skin_<slot>` overlay meshes from the section above (still fully
   no-op against this export, same as before).
+
+- **Runtime garment shells replace all of the above slot-mesh plans (2026-09-14).**
+  Neither the old CC0 tint meshes nor the planned hand-unwrapped `skin_<slot>`
+  overlays are used any more — and no further Blender work is needed for
+  outfits. `static/skin-shells.js` builds each slot's garment at page load
+  from the CC4 body pieces it covers (`torso_full` + `arms_shoulders_hands`
+  minus the hands → hoodie; `underwear` + `legs_upper_lower_tummy` → pants;
+  `feet` + the bottom of the shins → boots; the top / front of `head` → hat /
+  mask; a plain box on the back → backpack): copies their triangles, pushes
+  them ~6 mm out along the vertex normals, gives them cylindrical UVs and
+  re-binds the copy to `PlayerRig`, so every garment fits the body exactly by
+  construction. `static/skin-icon-texture.js` tints the shell with the item
+  icon's average colour and prints the icon on the shell's front. The legacy
+  `body_*`/`head_*`/`back_backpack` meshes and the duplicate CC4 alternates
+  (`hands_gloves`, `torso_tshirt`, `torso_long_shirt`, `legs_upper_lower`) are
+  hidden at load (`static/skin-viewer.js`), not deleted from the GLB, so an
+  older export still loads. Note the GLB's inverse bind matrices equal the
+  rig's rest pose, so with no animation the body renders in the CC4 bind
+  pose (arms down) — that is expected, not a skinning bug, and it matches
+  the item icons better than a T-pose would. Pure geometry/colour maths lives
+  in `static/skin-shell-math.js` (unit-tested with `node --test
+  test_skin_shell_math.mjs`).

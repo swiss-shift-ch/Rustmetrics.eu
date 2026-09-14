@@ -19,9 +19,6 @@
   // triangles are cut out of the hoodie shell.
   const HAND_MAX_Y = 1.04;
   const HAND_MIN_ABS_X = 0.40;
-  const HAT_MIN_Y = 1.67;      // above the hairline
-  const MASK_MIN_Y = 1.49;     // chin
-  const MASK_MIN_Z = -0.03;    // front half of the head only
   const BOOT_MAX_Y = 0.30;     // ankle-high boots: feet plus the bottom of the shins
   const TORSO_MAX_ABS_X = 0.23; // torso_full without the upper arms
   const TORSO_MIN_Y = 1.0;
@@ -59,14 +56,14 @@
       print: { width: 0.50, v0: 0.08, v1: 0.95 },
     },
     hat: {
-      sources: ["head"],
-      keepVertex: (x, y) => y >= HAT_MIN_Y,
-      print: { width: 0.50, v0: 0.05, v1: 0.95 },
+      // dome over the crown (head bounds top ~1.76, half-width ~0.12)
+      dome: { radius: 0.145, thetaLength: 1.95, position: { x: 0, y: 1.635, z: -0.015 } },
+      print: { width: 0.5, v0: 0.1, v1: 0.9 },
     },
     mask: {
-      sources: ["head"],
-      keepVertex: (x, y, z) => y >= MASK_MIN_Y && y < HAT_MIN_Y && z > MASK_MIN_Z,
-      print: { width: 0.55, v0: 0.05, v1: 0.95 },
+      // curved plate over the face front (chin ~1.50, brow ~1.70)
+      facePlate: { radius: 0.135, height: 0.2, arc: 2.2, position: { x: 0, y: 1.6, z: -0.015 } },
+      print: { width: 0.55, v0: 0.08, v1: 0.92 },
     },
     backpack: {
       backpack: true,
@@ -105,18 +102,23 @@
   function buildShells(root) {
     const out = {};
     for (const [slot, spec] of Object.entries(SLOT_SHELLS)) {
-      const mesh = spec.backpack
-        ? window.SkinShells.buildBackpack()
-        : window.SkinShells.buildShell({
-            sources: findMeshes(root, spec.sources),
-            inflate: spec.inflate || SHELL_INFLATE,
-            keepVertex: spec.keepVertex,
-            facing: 1,
-          });
+      let mesh;
+      if (spec.backpack) mesh = window.SkinShells.buildBackpack();
+      else if (spec.dome) mesh = window.SkinShells.buildDome(spec.dome);
+      else if (spec.facePlate) mesh = window.SkinShells.buildFacePlate(spec.facePlate);
+      else mesh = window.SkinShells.buildShell({
+        sources: findMeshes(root, spec.sources),
+        inflate: spec.inflate || SHELL_INFLATE,
+        keepVertex: spec.keepVertex,
+        facing: 1,
+      });
       if (!mesh) continue;
       mesh.name = `shell_${slot}`;
       mesh.visible = false;
-      (spec.backpack ? root : findMeshes(root, spec.sources)[0].parent).add(mesh);
+      // Static primitives (backpack, headgear) hang off the scene root; skinned
+      // garment shells go on the same parent as the body pieces they follow.
+      const parent = spec.sources ? findMeshes(root, spec.sources)[0]?.parent : root;
+      (parent || root).add(mesh);
       out[slot] = mesh;
     }
     return out;

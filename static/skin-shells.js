@@ -95,17 +95,36 @@
     return shell;
   }
 
-  /** Static box on the upper back; UV front faces -z so the print shows from behind. */
-  function buildBackpack() {
-    const g = new THREE.BoxGeometry(BACKPACK_SIZE.x, BACKPACK_SIZE.y, BACKPACK_SIZE.z, 2, 2, 2);
-    const pos = nonIndexedFloat(g.toNonIndexed(), "position");
-    const nonIndexed = g.toNonIndexed();
-    nonIndexed.setAttribute("uv", new THREE.BufferAttribute(M.cylindricalUVs(pos, M.bounds(pos), -1), 2));
-    const mat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: DEFAULT_ROUGHNESS, metalness: 0 });
-    const mesh = new THREE.Mesh(nonIndexed, mat);
-    mesh.position.set(BACKPACK_POS.x, BACKPACK_POS.y, BACKPACK_POS.z);
+  /**
+   * Static positioned mesh from a primitive geometry, UV'd cylindrically so a
+   * square item icon prints on the `facing` side. Used for the backpack and
+   * headgear: the body has no matching geometry to shell there, and the model
+   * never animates, so a fixed-position primitive over the head/back is enough
+   * and cheaper than skinning.
+   */
+  function buildStatic(geometry, pos, facing) {
+    const ni = geometry.index ? geometry.toNonIndexed() : geometry;
+    const p = nonIndexedFloat(ni, "position");
+    ni.setAttribute("uv", new THREE.BufferAttribute(M.cylindricalUVs(p, M.bounds(p), facing || 1), 2));
+    const mesh = new THREE.Mesh(ni, new THREE.MeshStandardMaterial({ color: 0x888888, roughness: DEFAULT_ROUGHNESS, metalness: 0 }));
+    if (pos) mesh.position.set(pos.x, pos.y, pos.z);
     return mesh;
   }
 
-  window.SkinShells = { buildShell, buildBackpack };
+  /** Static box on the upper back; UV front faces -z so the print shows from behind. */
+  function buildBackpack() {
+    return buildStatic(new THREE.BoxGeometry(BACKPACK_SIZE.x, BACKPACK_SIZE.y, BACKPACK_SIZE.z, 2, 2, 2), BACKPACK_POS, -1);
+  }
+
+  /** Hat / helmet: upper part of a sphere sitting on the crown, icon on the front. */
+  function buildDome(o) {
+    return buildStatic(new THREE.SphereGeometry(o.radius, 28, 18, 0, Math.PI * 2, 0, o.thetaLength), o.position, 1);
+  }
+
+  /** Mask: a front arc of a cylinder wall over the face, centred on +z. */
+  function buildFacePlate(o) {
+    return buildStatic(new THREE.CylinderGeometry(o.radius, o.radius, o.height, 28, 4, true, -o.arc / 2, o.arc), o.position, 1);
+  }
+
+  window.SkinShells = { buildShell, buildBackpack, buildDome, buildFacePlate };
 })();

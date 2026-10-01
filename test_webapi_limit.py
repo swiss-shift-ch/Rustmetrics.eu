@@ -6,7 +6,12 @@ grossen Netzwerke (Moose, Rustafied, Facepunch, ...) jetzt drin sind.
     python3 test_webapi_limit.py            # liest Key aus env oder /opt/rustmetrics/.env
     RM_STEAM_API_KEY=xyz python3 test_webapi_limit.py
 """
-import json, os, sys, time, urllib.parse, urllib.request
+import json
+import os
+import sys
+import time
+import urllib.parse
+import urllib.request
 
 def get_key():
     key = os.environ.get("RM_STEAM_API_KEY", "").strip()

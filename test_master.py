@@ -1,5 +1,6 @@
 """Quick master-server probe — to be run on the live server."""
-import socket, time
+import socket
+import time
 IPS = ['208.64.200.39','208.64.200.65','208.64.200.52','162.254.196.84']
 for ip in IPS:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

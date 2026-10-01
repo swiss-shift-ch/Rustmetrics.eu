@@ -1,5 +1,5 @@
 """Tests UDP-Egress vom Server. Master + NTP."""
-import socket, struct
+import socket
 
 print('=== Steam Master (port 27011) ===')
 MASTER_IPS = ['208.64.200.39', '208.64.200.65', '208.64.200.52', '162.254.196.84']

@@ -1,5 +1,7 @@
 """Pollt die Top-15 EU-Server aus Browse und testet jeden mit echtem A2S_INFO+PLAYER."""
-import json, socket, urllib.request
+import json
+import socket
+import urllib.request
 
 resp = urllib.request.urlopen("https://rustmetrics.eu/api/browse?region=eu&limit=15")
 data = json.load(resp)

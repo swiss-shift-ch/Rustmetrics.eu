@@ -2670,7 +2670,7 @@ def _iter_caddy_log_lines(base_path: str):
         except Exception:
             continue
     try:
-        with open(base_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(base_path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 yield line
     except Exception:

@@ -1013,6 +1013,21 @@ def _ics_format_utc(ts: int) -> str:
     return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(int(ts)))
 
 
+def _ics_fold(line: str, limit: int = 75) -> list[str]:
+    """RFC 5545 Line-Folding: max. 75 Oktette pro Zeile, Folgezeilen mit Leerzeichen,
+    UTF-8-Zeichen werden nie zerteilt (Servernamen enthalten oft Umlaute/Emoji)."""
+    parts, cur, size = [], "", 0
+    for ch in line:
+        n = len(ch.encode("utf-8"))
+        if size + n > limit:
+            parts.append(cur)
+            cur, size = " ", 1
+        cur += ch
+        size += n
+    parts.append(cur)
+    return parts
+
+
 def render_wipes_ics(user_id: int) -> str:
     """
     Generiert einen ICS-Feed mit allen Wipes (vergangene + nächste 4) der Server,
@@ -1094,13 +1109,7 @@ def render_wipes_ics(user_id: int) -> str:
 
     out.append("END:VCALENDAR")
     # RFC 5545: lines limited to 75 octets, CRLF line endings
-    body = []
-    for line in out:
-        while len(line.encode("utf-8")) > 75:
-            # Soft-wrap on character boundary (approximate — works for ASCII)
-            body.append(line[:74])
-            line = " " + line[74:]
-        body.append(line)
+    body = [part for line in out for part in _ics_fold(line)]
     return "\r\n".join(body) + "\r\n"
 
 

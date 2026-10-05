@@ -33,11 +33,20 @@ def parse_rust_keywords(kw: str) -> dict:
     return out
 
 
+# Bruchteil-Raten ("1.5x", "2.5x") enthalten "5x" als Teilstring, sind aber
+# niedrige Raten — vor dem Vergleich mit ganzen Multiplikatoren ausblenden.
+_FRACTIONAL_RATE_RE = re.compile(r"\d+\.\d+x")
+
+def _without_fractional_rates(blob: str) -> str:
+    return _FRACTIONAL_RATE_RE.sub(" ", blob)
+
+
 def detect_rust_tier(name, tags) -> str:
     n = (name or "").lower() + " " + " ".join(tags).lower()
     if "pve" in n: return "pve"
+    whole = _without_fractional_rates(n)
     for mult in ("100x","50x","20x","10x","5x","3x","2x"):
-        if mult in n: return mult
+        if mult in whole: return mult
     if "modded" in n or "oxide" in tags: return "modded"
     if "vanilla" in n: return "vanilla"
     return "vanilla"
@@ -77,7 +86,7 @@ def detect_rust_category(name, tags) -> str:
     if "official" in tl:    return "vanilla"
     # 1) Modded: Flag / Oxide / im Namen / hohe Rate (≥5x) / typische Mod-Features
     if ("modded" in blob or "oxide" in tl
-            or any(r in blob for r in _HIGH_RATES)
+            or any(r in _without_fractional_rates(blob) for r in _HIGH_RATES)
             or any(h in blob for h in _MOD_HINTS)):
         return "modded"
     # 2) Vanilla/Official: kein Rate-Multiplikator und explizit vanilla/official

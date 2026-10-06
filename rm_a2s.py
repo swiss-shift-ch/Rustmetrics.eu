@@ -31,7 +31,12 @@ def query_a2s(host: str, port: int, timeout: float = None, include_players: bool
                 s.sendto(A2S_INFO_REQUEST + challenge, addr)
                 data, _ = s.recvfrom(2048)
             result["ping_ms"] = int((time.time() - t0) * 1000)
-            result.update(_parse_a2s_info(data))
+            info = _parse_a2s_info(data)
+            if not info:
+                # Antwort ist kein A2S_INFO-Paket → nicht als online werten
+                result["error"] = "invalid response"
+                return result
+            result.update(info)
             result["online"] = True
         if include_players:
             result.update(_query_a2s_players(addr, timeout))

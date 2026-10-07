@@ -8,24 +8,29 @@ from __future__ import annotations
 import re
 import time
 
+# Zahlenfelder im Keyword-String: Präfix + Zahl (z. B. "mp200", "born1759312800").
+_KW_INT_FIELDS = (
+    ("mp", "max_players_kw"),
+    ("cp", "current_players_kw"),
+    ("qp", "queued_kw"),
+    ("born", "born_ts"),
+    ("v", "version_kw"),
+)
+
+
+def _kw_int_field(part: str) -> tuple[str, int] | None:
+    for prefix, key in _KW_INT_FIELDS:
+        if part.startswith(prefix) and part[len(prefix):].isdigit():
+            return key, int(part[len(prefix):])
+    return None
+
+
 def parse_rust_keywords(kw: str) -> dict:
     out: dict = {"tags": []}
     if not kw: return out
     for part in [p.strip() for p in kw.split(",") if p.strip()]:
-        if   part.startswith("mp"):
-            try: out["max_players_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("cp"):
-            try: out["current_players_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("qp"):
-            try: out["queued_kw"] = int(part[2:])
-            except ValueError: pass
-        elif part.startswith("v") and part[1:].isdigit():
-            out["version_kw"] = int(part[1:])
-        elif part.startswith("born"):
-            try: out["born_ts"] = int(part[4:])
-            except ValueError: pass
+        field = _kw_int_field(part)
+        if field: out[field[0]] = field[1]
         elif part.startswith("gm"): out["game_mode"] = part[2:]
         elif part.startswith("h") and part[1:].isdigit(): out["hash"] = part[1:]
         elif part == "stok": out["server_tokenized"] = True

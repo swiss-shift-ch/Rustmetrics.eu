@@ -41,6 +41,20 @@ class TestSlotForName:
     def test_hat_item(self):
         assert slot_for_name("Boonie Hat") == "hat"
 
+    def test_every_base_name_resolves_to_its_own_slot(self):
+        # "Jacket"/"Pants" stecken auch in "Wood Armor Jacket"/"Wood Armor Pants"
+        for name, slot in SLOT_MAP.items():
+            assert slot_for_name(name) == slot, f"{name!r} should map to {slot!r}"
+
+    def test_longest_base_name_wins_for_armor_jacket(self):
+        assert slot_for_name("Roadsign Jacket") == "chest"
+
+    def test_longest_base_name_wins_inside_skin_name(self):
+        assert slot_for_name("Plywood Wood Armor Pants") == "kilt"
+
+    def test_plain_jacket_skin_stays_hoodie(self):
+        assert slot_for_name("Blackout Jacket") == "hoodie"
+
 
 class TestSlotForSlug:
     def test_returns_none_for_empty_string(self):

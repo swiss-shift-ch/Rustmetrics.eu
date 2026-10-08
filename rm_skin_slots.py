@@ -54,6 +54,8 @@ SLOT_MAP: dict[str, str] = {
     "Road Sign Jacket":    "chest",
 }
 
+_SLOT_MAP_LONGEST_FIRST = sorted(SLOT_MAP.items(), key=lambda kv: len(kv[0]), reverse=True)
+
 
 def slot_for_name(market_hash_name: str) -> str | None:
     """Findet den kuratierten Slot fuer ein Item anhand des Basis-Namens.
@@ -62,12 +64,13 @@ def slot_for_name(market_hash_name: str) -> str | None:
     Kilt" fuer "Roadsign Kilt" etc.) — deshalb Teilstring-Match auf die in
     SLOT_MAP hinterlegten Basis-Namen statt exaktem Vergleich. Gibt None
     zurueck, wenn kein bekanntes Basisitem im Namen vorkommt (lieber
-    unbekannt lassen als falsch raten).
+    unbekannt lassen als falsch raten). Der laengste passende Basis-Name
+    gewinnt, sonst faengt "Jacket" (hoodie) auch "Roadsign Jacket" (chest).
     """
     if not market_hash_name:
         return None
     lname = market_hash_name.lower()
-    for base_name, slot in SLOT_MAP.items():
+    for base_name, slot in _SLOT_MAP_LONGEST_FIRST:
         if base_name.lower() in lname:
             return slot
     return None

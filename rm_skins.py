@@ -73,6 +73,14 @@ SKINPORT_MIN_INTERVAL_SEC = _env("RM_SKINPORT_MIN_INTERVAL_SEC", 3600, int)
 _UA = "Mozilla/5.0 (compatible; RustMetrics/1.0; +https://rustmetrics.eu)"
 
 
+class SteamRateLimited(RuntimeError):
+    """Steam antwortet mit 429 — Aufrufer muss sofort aufhoeren statt weiterzufragen.
+
+    Eigene Klasse, damit ein 429 nicht mit anderen RuntimeErrors aus _http_get()
+    (Antwort zu gross, brotli fehlt) verwechselt wird.
+    """
+
+
 def _http_get(url: str, headers: dict, max_bytes: int | None = None) -> bytes:
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=15) as r:
@@ -231,7 +239,7 @@ def steam_priceoverview(market_hash_name: str, currency: int = STEAM_CURRENCY_EU
         body = _http_get(url, {"User-Agent": _UA})
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
+            raise SteamRateLimited("Steam rate limit (429) — Abfrage stoppen") from e
         raise
     data = json.loads(body)
     if not data.get("success"):
@@ -290,7 +298,7 @@ def steam_market_icon_url(market_hash_name: str) -> str | None:
         body = _http_get(url, {"User-Agent": _UA}, max_bytes=MAX_LISTING_HTML_BYTES)
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
+            raise SteamRateLimited("Steam rate limit (429) — Abfrage stoppen") from e
         raise
     icon_hash = icon_hash_from_listing_html(body.decode("utf-8", errors="ignore"))
     if not icon_hash:
@@ -327,7 +335,7 @@ def download_skin_icon(cdn_url: str, dest_path: str) -> None:
         body = _http_get(cdn_url, {"User-Agent": _UA}, max_bytes=MAX_ICON_BYTES)
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
+            raise SteamRateLimited("Steam rate limit (429) — Abfrage stoppen") from e
         raise
     if not body.startswith(_PNG_MAGIC):
         raise ValueError(f"Antwort ist kein PNG (CDN-URL: {cdn_url})")
@@ -362,7 +370,7 @@ def enrich_skin_image_urls(
     for item_id in item_ids:
         try:
             cdn_url = steam_market_icon_url(item_id)
-        except RuntimeError:
+        except SteamRateLimited:
             break  # 429 — sofort abbrechen, Rest bleibt fuer den naechsten Lauf offen
         except Exception as e:
             # Alles andere (404 fuer ein delistetes Item, Timeout, ...) darf
@@ -381,7 +389,7 @@ def enrich_skin_image_urls(
         filename = local_icon_filename(item_id)
         try:
             download_skin_icon(cdn_url, os.path.join(icons_dir, filename))
-        except RuntimeError:
+        except SteamRateLimited:
             break  # 429 vom CDN — genauso abbrechen wie bei der Listing-Seite
         except Exception as e:
             print(f"[skin-icons] {item_id!r} -> ERROR {type(e).__name__}: {e}", flush=True)

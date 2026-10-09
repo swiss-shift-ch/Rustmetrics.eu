@@ -100,6 +100,18 @@ class TestDownloadSkinIcon:
             with pytest.raises(RuntimeError):
                 rm_skins.download_skin_icon("https://cdn.example/x", "/tmp/wont-be-written.png")
 
+    def test_429_raises_the_dedicated_rate_limit_error(self):
+        with mock.patch.object(rm_skins.urllib.request, "urlopen", side_effect=_http_429()):
+            with pytest.raises(rm_skins.SteamRateLimited):
+                rm_skins.download_skin_icon("https://cdn.example/x", "/tmp/wont-be-written.png")
+
+    def test_oversized_response_is_not_reported_as_rate_limit(self):
+        fake = _FakeResponse(b"x" * (rm_skins.MAX_ICON_BYTES + 10))
+        with mock.patch.object(rm_skins.urllib.request, "urlopen", return_value=fake):
+            with pytest.raises(RuntimeError) as excinfo:
+                rm_skins.download_skin_icon("https://cdn.example/x", "/tmp/wont-be-written.png")
+        assert not isinstance(excinfo.value, rm_skins.SteamRateLimited)
+
 
 class TestEnrichSkinImageUrls:
     def test_continues_past_a_non_429_error_instead_of_crashing_the_run(self, tmp_path, monkeypatch):
@@ -129,7 +141,7 @@ class TestEnrichSkinImageUrls:
 
         def fake_icon_url(item_id):
             if item_id == "B":
-                raise RuntimeError("Steam rate limit (429) — Abfrage stoppen")
+                raise rm_skins.SteamRateLimited("Steam rate limit (429) — Abfrage stoppen")
             return "https://cdn.example/ok.png"
 
         monkeypatch.setattr(rm_skins, "steam_market_icon_url", fake_icon_url)
@@ -146,7 +158,7 @@ class TestEnrichSkinImageUrls:
         monkeypatch.setattr(rm_skins, "steam_market_icon_url", lambda item_id: "https://cdn.example/x.png")
 
         def fake_download(url, dest):
-            raise RuntimeError("Steam rate limit (429) — Abfrage stoppen")
+            raise rm_skins.SteamRateLimited("Steam rate limit (429) — Abfrage stoppen")
 
         monkeypatch.setattr(rm_skins, "download_skin_icon", fake_download)
         monkeypatch.setattr(rm_skins.time, "sleep", lambda s: None)
@@ -154,3 +166,37 @@ class TestEnrichSkinImageUrls:
         result = rm_skins.enrich_skin_image_urls(lambda: conn, str(tmp_path), sleep_sec=0)
 
         assert result == {"updated": 0, "failed": 0, "remaining": 2}
+
+    def test_oversized_listing_page_counts_as_failed_and_does_not_stop_the_run(self, tmp_path, monkeypatch):
+        # Regression test: _http_get() raises a plain RuntimeError for a response over
+        # the size cap. That used to be mistaken for a 429 and stopped the run, so the
+        # same item blocked every later one on each rerun (ORDER BY item_id).
+        conn = _FakeConn(rows=[{"item_id": "Huge Listing"}, {"item_id": "Good Item"}])
+
+        def fake_icon_url(item_id):
+            if item_id == "Huge Listing":
+                raise RuntimeError("Antwort zu gross (> 2097152 Bytes): https://x")
+            return "https://cdn.example/good.png"
+
+        monkeypatch.setattr(rm_skins, "steam_market_icon_url", fake_icon_url)
+        monkeypatch.setattr(rm_skins, "download_skin_icon", lambda url, dest: None)
+        monkeypatch.setattr(rm_skins.time, "sleep", lambda s: None)
+
+        result = rm_skins.enrich_skin_image_urls(lambda: conn, str(tmp_path), sleep_sec=0)
+
+        assert result == {"updated": 1, "failed": 1, "remaining": 0}
+
+    def test_oversized_icon_download_counts_as_failed_and_does_not_stop_the_run(self, tmp_path, monkeypatch):
+        conn = _FakeConn(rows=[{"item_id": "Huge Icon"}, {"item_id": "Good Item"}])
+        monkeypatch.setattr(rm_skins, "steam_market_icon_url", lambda item_id: "https://cdn.example/x.png")
+
+        def fake_download(url, dest):
+            if dest.endswith(rm_skins.local_icon_filename("Huge Icon")):
+                raise RuntimeError("Antwort zu gross (> 1048576 Bytes): https://cdn.example/x.png")
+
+        monkeypatch.setattr(rm_skins, "download_skin_icon", fake_download)
+        monkeypatch.setattr(rm_skins.time, "sleep", lambda s: None)
+
+        result = rm_skins.enrich_skin_image_urls(lambda: conn, str(tmp_path), sleep_sec=0)
+
+        assert result == {"updated": 1, "failed": 1, "remaining": 0}

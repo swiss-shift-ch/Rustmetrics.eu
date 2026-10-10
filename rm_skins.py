@@ -18,6 +18,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -146,6 +147,24 @@ def base_item_from_market_page(market_page: str | None) -> str | None:
     return None
 
 
+def _price_or_none(value) -> float | None:
+    """Preis als float, oder None wenn der Wert unbrauchbar ist.
+
+    Externe API -> nicht vertrauen: ein einzelner kaputter Wert ("n/a", Liste,
+    NaN, negativ) soll nur dieses Item ohne Preis lassen, nicht per Exception
+    den ganzen Refresh abbrechen.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        price = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(price) or price < 0:
+        return None
+    return price
+
+
 def skinport_item_to_row(item: dict) -> dict | None:
     """Wandelt einen Skinport-API-Eintrag in unser DB-Zeilenformat.
 
@@ -155,14 +174,13 @@ def skinport_item_to_row(item: dict) -> dict | None:
     name = item.get("market_hash_name")
     if not name:
         return None
-    price = item.get("min_price")
     return {
         "item_id": name,
         "name": name,
         "raw_category": category_from_market_page(item.get("market_page")),
         "base_item": base_item_from_market_page(item.get("market_page")),
         "platform": "skinport",
-        "price": float(price) if price is not None else None,
+        "price": _price_or_none(item.get("min_price")),
         "currency": item.get("currency") or "EUR",
         "url": item.get("market_page") or item.get("item_page"),
         "quantity": item.get("quantity"),

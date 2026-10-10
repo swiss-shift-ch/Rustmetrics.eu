@@ -101,6 +101,22 @@ class TestSkinportItemToRow:
         assert row["price"] == 3.0
         assert isinstance(row["price"], float)
 
+    def test_unparsable_price_becomes_none_instead_of_raising(self):
+        # Externe API: ein kaputter Preis darf nicht den ganzen Refresh abbrechen.
+        for bad in ("n/a", "", [], {}, True):
+            row = skinport_item_to_row({"market_hash_name": "X", "min_price": bad})
+            assert row is not None
+            assert row["price"] is None
+
+    def test_non_finite_or_negative_price_becomes_none(self):
+        for bad in (float("nan"), float("inf"), "nan", -1.0):
+            row = skinport_item_to_row({"market_hash_name": "X", "min_price": bad})
+            assert row["price"] is None
+
+    def test_zero_price_is_kept(self):
+        row = skinport_item_to_row({"market_hash_name": "X", "min_price": 0})
+        assert row["price"] == 0.0
+
 
 class TestIconHashFromListingHtml:
     # Realer (gekuerzter) Ausschnitt einer Steam-Market-Listing-Seite,

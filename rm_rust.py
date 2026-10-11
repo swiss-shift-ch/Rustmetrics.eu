@@ -111,7 +111,7 @@ _REGION_NAME_UPPER = {
 _REGION_NAME_WORDS = {
     "eu": ("europe", "european"),
     "na": ("america", "canada"),
-    "sa": ("south america", "brazil", "brasil"),
+    "sa": ("south america", "latin america", "brazil", "brasil"),
     "wa": ("middle east", "mideast"),
     "ea": ("asia", "singapore", "japan", "korea"),
     "oc": ("oceania", "australia"),
@@ -126,6 +126,20 @@ def _name_has_upper_token(name: str, token: str) -> bool:
     return re.search(r"(?<![A-Za-z])" + re.escape(token) + r"(?![A-Za-z])", name) is not None
 
 
+def _regions_from_name_words(name_lc: str) -> set[str]:
+    """Regionen, deren Wort im Namen steht. Laengere Woerter zuerst und dann verbraucht,
+    sonst zaehlt "south america" wegen des enthaltenen "america" als NA."""
+    pairs = sorted(((w, region) for region, words in _REGION_NAME_WORDS.items() for w in words),
+                   key=lambda pair: len(pair[0]), reverse=True)
+    found: set[str] = set()
+    rest = name_lc
+    for word, region in pairs:
+        if word in rest:
+            found.add(region)
+            rest = rest.replace(word, " ")
+    return found
+
+
 def detect_rust_region(name, tags) -> str | None:
     # 1) Offizieller Region-Tag hat Vorrang.
     for t in (tags or []):
@@ -133,9 +147,9 @@ def detect_rust_region(name, tags) -> str | None:
         if tl in _RUST_REGION_TAGS:
             return tl
     # 2) Fallback: langes Wort (case-insensitive).
-    n_lc = (name or "").lower()
+    word_regions = _regions_from_name_words((name or "").lower())
     for region in _REGION_ORDER:
-        if any(w in n_lc for w in _REGION_NAME_WORDS[region]):
+        if region in word_regions:
             return region
     # 3) Fallback: kurzes GROSS-Token im Original.
     n = name or ""

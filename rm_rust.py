@@ -175,7 +175,7 @@ _GROUP_NOLIMIT_RE = re.compile(
     r"|\bunlimited\s*(?:group|team|clan)s?\b", re.I)
 _GROUP_MAX_RE = re.compile(
     r"\b(?:max|group|team|clan)[\s._\-]*(?:group|team|clan|size|limit)?"
-    r"[\s:._\-]*([1-9]|1[0-2])\b", re.I)
+    r"[\s:._\-]*([1-9]|1[0-2])\b(?![.,]\d)", re.I)  # "team 2.5x" ist eine Rate
 _GROUP_NMAN_RE = re.compile(r"\b([2-9])[\s\-]*man\b", re.I)
 
 

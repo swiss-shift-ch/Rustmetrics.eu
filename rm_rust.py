@@ -224,10 +224,19 @@ def pick_bm_server_id(results: list[dict], host: str, port: int) -> int | None:
         return None
 
 
+MAX_PORT = 65535
+
+
 def presence_query_port(addr: str | None) -> int | None:
-    """Rust answers A2S on game port + 1 by default; Steam presence only reports the game port."""
+    """Rust answers A2S on game port + 1 by default; Steam presence only reports the game port.
+
+    None when the result would not be a valid port ("0.0.0.0:0", game port 65535).
+    """
     port_str = (addr or "").rpartition(":")[2]
-    return int(port_str) + 1 if port_str.isdigit() else None
+    if not port_str.isdigit():
+        return None
+    game_port = int(port_str)
+    return game_port + 1 if 0 < game_port < MAX_PORT else None
 
 
 def match_presence_server(servers: list[dict], host: str | None, addr: str | None) -> dict | None:

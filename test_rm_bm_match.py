@@ -60,6 +60,13 @@ class MatchPresenceServerTest(unittest.TestCase):
         self.assertIsNone(presence_query_port(None))
         self.assertIsNone(presence_query_port("194.54.88.71"))
 
+    def test_presence_query_port_is_none_outside_the_valid_port_range(self):
+        self.assertIsNone(presence_query_port("0.0.0.0:0"))
+        self.assertIsNone(presence_query_port("194.54.88.71:65535"))
+        self.assertIsNone(presence_query_port("194.54.88.71:99999"))
+        self.assertEqual(presence_query_port("194.54.88.71:65534"), 65535)
+        self.assertEqual(presence_query_port("194.54.88.71:1"), 2)
+
     def test_handles_missing_host_or_address(self):
         self.assertIsNone(match_presence_server(self.ROWS, None, None))
         self.assertIsNone(match_presence_server(self.ROWS, "203.0.113.99", "203.0.113.99:28015"))

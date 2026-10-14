@@ -61,11 +61,13 @@ _OFFICIAL_RE = re.compile(r"\b(official|facepunch)\b", re.I)
 _RATE_MULTS   = ("100x", "50x", "20x", "10x", "5x", "4x", "3x", "2x", "1.5x")
 _HIGH_RATES   = ("100x", "50x", "20x", "10x", "5x")   # ab 5x zählt als modded
 # Mod-Stichwörter: gesetzte Plugins/Gameplay-Änderungen → modded, auch ohne Flag
-_MOD_HINTS = ("kit", "shop", "/home", "teleport", " tp ", "skinbox", "bgrade",
+_MOD_HINTS = ("/home", "teleport", " tp ", "skinbox", "bgrade",
               "raidable", "loot+", "lootx", "instacraft", "instant craft",
               "no bp", "nobp", "no blueprint", "battlefield", "bedwars",
               "aimtrain", "arena", "ffa", "gungame", "creative", "juggernaut",
               "zombie", "npc", "bots ")
+# Kit/Shop nur am Wortanfang: «workshop» ist kein Shop, «No Kits» kein Kit-Server.
+_MOD_HINT_RE = re.compile(r"(?<!no )(?<!no-)\bkit|\bshop", re.I)
 
 def detect_rust_category(name, tags) -> str:
     tl = [str(t).lower() for t in (tags or [])]
@@ -78,7 +80,8 @@ def detect_rust_category(name, tags) -> str:
     # 1) Modded: Flag / Oxide / im Namen / hohe Rate (≥5x) / typische Mod-Features
     if ("modded" in blob or "oxide" in tl
             or any(r in blob for r in _HIGH_RATES)
-            or any(h in blob for h in _MOD_HINTS)):
+            or any(h in blob for h in _MOD_HINTS)
+            or _MOD_HINT_RE.search(blob)):
         return "modded"
     # 2) Vanilla/Official: kein Rate-Multiplikator und explizit vanilla/official
     has_mult = any(m in blob for m in _RATE_MULTS)

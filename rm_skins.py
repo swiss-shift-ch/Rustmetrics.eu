@@ -233,8 +233,13 @@ def steam_priceoverview(market_hash_name: str, currency: int = STEAM_CURRENCY_EU
         if e.code == 429:
             raise RuntimeError("Steam rate limit (429) — Abfrage stoppen") from e
         raise
-    data = json.loads(body)
-    if not data.get("success"):
+    # Steam liefert bei Stoerungen auch HTML, einen leeren Body oder JSON ohne
+    # Objekt (z.B. `null`) — alles "kein Preis", kein Absturz beim Aufrufer.
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not data.get("success"):
         return None
     return {
         "lowest_price": data.get("lowest_price"),

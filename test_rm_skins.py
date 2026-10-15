@@ -207,3 +207,37 @@ class TestRefreshSkinPrices:
         assert len(insert_calls) == 1
         item_id, name, raw_category, slot, _created_at = insert_calls[0]
         assert (item_id, name, raw_category, slot) == ("Ornate Vest", "Ornate Vest", "clothing", "chest")
+
+
+class TestSteamPriceoverview:
+    def _answer(self, monkeypatch, body: bytes):
+        monkeypatch.setattr(rm_skins, "_http_get", lambda url, headers: body)
+
+    def test_returns_prices_for_successful_answer(self, monkeypatch):
+        self._answer(monkeypatch, b'{"success": true, "lowest_price": "1,23\\u20ac", '
+                                  b'"median_price": "1,30\\u20ac", "volume": "42"}')
+        assert rm_skins.steam_priceoverview("Plywood Kilt") == {
+            "lowest_price": "1,23€",
+            "median_price": "1,30€",
+            "volume": "42",
+        }
+
+    def test_returns_none_when_success_false(self, monkeypatch):
+        self._answer(monkeypatch, b'{"success": false}')
+        assert rm_skins.steam_priceoverview("Plywood Kilt") is None
+
+    def test_returns_none_for_json_null(self, monkeypatch):
+        self._answer(monkeypatch, b"null")
+        assert rm_skins.steam_priceoverview("Plywood Kilt") is None
+
+    def test_returns_none_for_json_list(self, monkeypatch):
+        self._answer(monkeypatch, b"[]")
+        assert rm_skins.steam_priceoverview("Plywood Kilt") is None
+
+    def test_returns_none_for_html_error_page(self, monkeypatch):
+        self._answer(monkeypatch, b"<html><body>Service Unavailable</body></html>")
+        assert rm_skins.steam_priceoverview("Plywood Kilt") is None
+
+    def test_returns_none_for_empty_body(self, monkeypatch):
+        self._answer(monkeypatch, b"")
+        assert rm_skins.steam_priceoverview("Plywood Kilt") is None

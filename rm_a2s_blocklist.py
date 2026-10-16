@@ -21,25 +21,32 @@ MAX_SHARED_NAME_RATIO = 0.10
 LOW_POP_ALWAYS_BM_CHECK = 10
 
 
+def _non_blank(names: list[str]) -> list[str]:
+    """A2S reports players that are still connecting with an empty name; they say nothing about the source."""
+    return [n for n in names if (n or "").strip()]
+
+
 def looks_randomized(names: list[str]) -> bool:
     """Full heuristic for big lists; for small lists a high share of pool-style names is enough suspicion."""
     if detect_name_anonymization(names):
         return True
+    names = _non_blank(names)
     if len(names) < MIN_COMPARE_NAMES:
         return False
     return sum(1 for n in names if is_pool_style_name(n)) / len(names) >= POOL_NAME_RATIO
 
 
 def names_look_real(names: list[str]) -> bool:
-    return len(names) >= MIN_COMPARE_NAMES and not looks_randomized(names)
+    return len(_non_blank(names)) >= MIN_COMPARE_NAMES and not looks_randomized(names)
 
 
 def bm_names_replace_randomized(a2s_names: list[str], bm_names: list[str]) -> bool:
     """A2S names look randomized while BattleMetrics has different, real-looking names (RCON-connected server)."""
     if not looks_randomized(a2s_names) or not names_look_real(bm_names):
         return False
-    shared = len({n.lower() for n in a2s_names} & {n.lower() for n in bm_names})
-    return shared <= MAX_SHARED_NAME_RATIO * min(len(a2s_names), len(bm_names))
+    a2s_real, bm_real = _non_blank(a2s_names), _non_blank(bm_names)
+    shared = len({n.lower() for n in a2s_real} & {n.lower() for n in bm_real})
+    return shared <= MAX_SHARED_NAME_RATIO * min(len(a2s_real), len(bm_real))
 
 
 def should_use_bm_names(a2s_names: list[str], bm_names: list[str]) -> bool:

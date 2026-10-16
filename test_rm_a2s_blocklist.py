@@ -104,6 +104,17 @@ class NameSourceTest(unittest.TestCase):
         self.assertFalse(names_look_real(REAL_NAMES_SMALL[:2]))
         self.assertTrue(names_look_real(REAL_NAMES_SMALL[:3]))
 
+    def test_blank_names_of_connecting_players_do_not_dilute_pool_ratio(self):
+        # A2S lists players that are still connecting with an empty name.
+        self.assertTrue(looks_randomized(POOL[:3] + ["", " ", ""]))
+
+    def test_blank_names_do_not_count_as_real_names(self):
+        self.assertFalse(names_look_real(["", "", "Player_1"]))
+        self.assertFalse(should_use_bm_names(POOL[:4], ["", "", "Player_1"]))
+
+    def test_blank_names_are_not_shared_between_sources(self):
+        self.assertTrue(should_use_bm_names(POOL[:4] + [""], REAL_NAMES_SMALL[:4] + [""]))
+
 
 class _FakeA2SServer:
     def __init__(self):

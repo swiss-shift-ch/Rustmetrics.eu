@@ -17,12 +17,16 @@ HOST            = _env("RM_HOST", "127.0.0.1")
 PORT            = _env("RM_PORT", 8765, int)
 ORIGIN          = _env("RM_ORIGIN", "https://rustmetrics.eu").rstrip("/")
 
+def _pg_quote(v):
+    # libpq-conninfo: ungequotet frisst "password= dbname=x" das dbname als Passwort.
+    return "'" + str(v).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
 PG_DSN = (
-    f"host={_env('RM_PGHOST', '127.0.0.1')} "
-    f"port={_env('RM_PGPORT', 5432, int)} "
-    f"user={_env('RM_PGUSER', 'rustmetrics')} "
-    f"password={_env('RM_PGPASSWORD', '')} "
-    f"dbname={_env('RM_PGDATABASE', 'rustmetrics')}"
+    f"host={_pg_quote(_env('RM_PGHOST', '127.0.0.1'))} "
+    f"port={_pg_quote(_env('RM_PGPORT', 5432, int))} "
+    f"user={_pg_quote(_env('RM_PGUSER', 'rustmetrics'))} "
+    f"password={_pg_quote(_env('RM_PGPASSWORD', ''))} "
+    f"dbname={_pg_quote(_env('RM_PGDATABASE', 'rustmetrics'))}"
 )
 
 ADMIN_STEAMIDS   = set(

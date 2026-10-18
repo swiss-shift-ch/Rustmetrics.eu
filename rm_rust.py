@@ -33,11 +33,25 @@ def parse_rust_keywords(kw: str) -> dict:
     return out
 
 
+_TIER_MULTS = (100, 50, 20, 10, 5, 3, 2)
+# Ganze Rate als eigene Zahl: "12x" darf nicht als "2x", "1.5x" nicht als "5x" zaehlen.
+_TIER_RATE_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)x(?![a-z0-9])")
+
+
+def _tier_from_rates(blob: str) -> str | None:
+    """Hoechste Rate im Text auf die naechstkleinere Tier-Stufe abrunden (12x -> 10x)."""
+    rates = [float(r) for r in _TIER_RATE_RE.findall(blob)]
+    if not rates:
+        return None
+    rate = max(rates)
+    return next((f"{m}x" for m in _TIER_MULTS if rate >= m), None)
+
+
 def detect_rust_tier(name, tags) -> str:
     n = (name or "").lower() + " " + " ".join(tags).lower()
     if "pve" in n: return "pve"
-    for mult in ("100x","50x","20x","10x","5x","3x","2x"):
-        if mult in n: return mult
+    tier = _tier_from_rates(n)
+    if tier: return tier
     if "modded" in n or "oxide" in tags: return "modded"
     if "vanilla" in n: return "vanilla"
     return "vanilla"

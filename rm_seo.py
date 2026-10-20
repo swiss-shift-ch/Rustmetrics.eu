@@ -1,9 +1,10 @@
 """SEO helpers: canonical-host redirect and the server-rendered /browser page."""
 
 from html import escape
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 BROWSER_ROWS_MAX = 100
+MAX_HOST_LEN = 253
 
 _HOME_TITLE = "<title>RustMetrics — Rust Server &amp; Player Tracker</title>"
 _BROWSER_TITLE = "<title>Rust Server Browser — Live Pop, Wipes &amp; Filters | RustMetrics</title>"
@@ -26,6 +27,26 @@ def canonical_redirect_location(host_header: str | None, request_path: str, orig
         return None
     path = request_path if request_path.startswith("/") else "/"
     return f"{origin.rstrip('/')}{path}"
+
+
+def parse_server_path(spec: str) -> tuple[str, int] | None:
+    """(host, port) from the part after /server/; None if malformed.
+
+    Links from the browser page percent-encode the host (quote(..., safe='')),
+    so it has to be decoded here, otherwise e.g. IPv6 hosts never match.
+    """
+    spec = unquote(spec).rstrip("/")
+    host, sep, port_str = spec.rpartition(":")
+    if not sep or not host or len(host) > MAX_HOST_LEN:
+        return None
+    if any(c.isspace() or not c.isprintable() for c in host):  # e.g. %00 would break the DB query
+        return None
+    if not (port_str.isascii() and port_str.isdigit()):
+        return None
+    port = int(port_str)
+    if not 0 < port < 65536:
+        return None
+    return host, port
 
 
 def _browser_row_html(server: dict) -> str:

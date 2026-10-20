@@ -63,7 +63,7 @@ from rm_rust import (  # noqa: F401
     _REGION_FILTER_ALIASES, _REGION_GROUPS,
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
-from rm_seo import canonical_redirect_location, render_browser_page
+from rm_seo import canonical_redirect_location, parse_server_path, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
@@ -4194,25 +4194,22 @@ class Handler(SimpleHTTPRequestHandler):
 
         # Public server detail page  /server/<host>:<port>
         if u.path.startswith("/server/"):
-            spec = u.path[len("/server/"):].rstrip("/")
-            if ":" in spec:
-                host, port_str = spec.rsplit(":", 1)
-                try: port = int(port_str)
-                except ValueError: port = 0
-                if host and 0 < port < 65536:
-                    try:
-                        html, status = render_public_server_page(host, port)
-                    except Exception as e:
-                        print(f"[public_server] {host}:{port}: {e}", file=sys.stderr, flush=True)
-                        return self._fail(e)
-                    body = html.encode("utf-8")
-                    self.send_response(status)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.send_header("Cache-Control", "public, max-age=60")
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
+            parsed = parse_server_path(u.path[len("/server/"):])
+            if parsed:
+                host, port = parsed
+                try:
+                    html, status = render_public_server_page(host, port)
+                except Exception as e:
+                    print(f"[public_server] {host}:{port}: {e}", file=sys.stderr, flush=True)
+                    return self._fail(e)
+                body = html.encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=60")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             return self._json({"error": "use /server/<host>:<port>"}, 400)
 
         # Calendar-ICS-Feed  /calendar/wipes.ics?token=<calendar_token>

@@ -3,7 +3,10 @@
 import os
 import unittest
 
-from rm_seo import BROWSER_ROWS_MAX, browser_rows_html, canonical_redirect_location, render_browser_page
+import re
+
+from rm_seo import (BROWSER_ROWS_MAX, browser_rows_html, canonical_redirect_location, parse_server_path,
+                    render_browser_page)
 
 ORIGIN = "https://rustmetrics.eu"
 INDEX_PATH = os.path.join(os.path.dirname(__file__), "static", "index.html")
@@ -44,6 +47,26 @@ class BrowserRowsTest(unittest.TestCase):
     def test_caps_row_count(self):
         html = browser_rows_html([_server(i % 250, i) for i in range(BROWSER_ROWS_MAX + 50)])
         self.assertEqual(html.count('class="browse-row"'), BROWSER_ROWS_MAX)
+
+
+class ParseServerPathTest(unittest.TestCase):
+    def test_plain_ipv4_and_hostname(self):
+        self.assertEqual(parse_server_path("1.2.3.4:28015"), ("1.2.3.4", 28015))
+        self.assertEqual(parse_server_path("eu.example-rust.com:28015/"), ("eu.example-rust.com", 28015))
+
+    def test_decodes_percent_encoded_host_from_browser_links(self):
+        self.assertEqual(parse_server_path("2001%3Adb8%3A%3A1:28015"), ("2001:db8::1", 28015))
+
+    def test_round_trip_with_browser_row_link(self):
+        html = browser_rows_html([{"host": "2001:db8::7", "port": 28016, "name": "v6", "players_count": 1}])
+        spec = re.search(r'href="/server/([^"]+)"', html).group(1)
+        self.assertEqual(parse_server_path(spec), ("2001:db8::7", 28016))
+
+    def test_rejects_malformed_specs(self):
+        for spec in ("", "1.2.3.4", ":28015", "1.2.3.4:", "1.2.3.4:abc", "1.2.3.4:0", "1.2.3.4:65536",
+                     "1.2.3.4:+28015", "1.2.3.4:\u00b2", "bad%00host:28015", "a%20b:28015",
+                     "x" * 254 + ":28015"):
+            self.assertIsNone(parse_server_path(spec), spec)
 
 
 class RenderBrowserPageTest(unittest.TestCase):

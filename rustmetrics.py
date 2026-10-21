@@ -65,6 +65,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
+from rm_params import int_param
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
 
@@ -4107,17 +4108,23 @@ class Handler(SimpleHTTPRequestHandler):
             def g(k, d=""):
                 v = qs.get(k, [d]); return v[0] if v else d
             try:
+                nums = {
+                    "min_pop": int_param(g("min_pop"), 0, 0, 9999),
+                    "max_pop": int_param(g("max_pop"), 9999, 0, 9999),
+                    "limit": int_param(g("limit"), 200, 1, BROWSE_RESULT_CAP),
+                    "offset": int_param(g("offset"), 0, 0, 20000),
+                    "max_wipe_h": int_param(g("max_wipe_h"), 0, 0, 720),
+                }
+            except ValueError:
+                return self._json({"error": "bad parameter"}, 400)
+            try:
                 data = api_browse(
                     user_id=uid,
                     region=g("region", "all"), q=g("q", ""), tier=g("tier", "all"),
-                    min_pop=int(g("min_pop", "0") or 0),
-                    max_pop=int(g("max_pop", "9999") or 9999),
                     sort=g("sort", "pop_desc"),
-                    limit=min(BROWSE_RESULT_CAP, int(g("limit", "200") or 200)),
-                    offset=max(0, min(20000, int(g("offset", "0") or 0))),
                     group=g("group", "all"),
-                    max_wipe_h=max(0, min(720, int(g("max_wipe_h", "0") or 0))),
                     ip=self._client_ip(),
+                    **nums,
                 )
                 return self._json(data)
             except PermissionError as e:

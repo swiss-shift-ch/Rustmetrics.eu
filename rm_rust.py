@@ -279,13 +279,17 @@ def detect_name_anonymization(player_names: list[str]) -> bool:
     return dupes >= 3 and lower_ratio >= 0.70
 
 
-def next_wipe_estimate(born_ts):
-    if not born_ts: return None
-    now = int(time.time())
+# Serveruhren gehen teils vor: born bis so weit in der Zukunft gilt als "gerade gewipt".
+BORN_FUTURE_TOLERANCE_SEC = 86400
+
+
+def next_wipe_estimate(born_ts, now=None):
+    if not born_ts or born_ts < 0: return None
+    if now is None: now = int(time.time())
     week = 7 * 86400
-    if born_ts > now:
-        return {"last_wipe_ts": born_ts, "next_wipe_estimate_ts": born_ts, "days_until_next": 0}
-    weeks_since = (now - born_ts) // week
+    # Weiter in der Zukunft ist born Unsinn (z. B. Millisekunden) → keine Schaetzung statt "Wipe in 0d".
+    if born_ts > now + BORN_FUTURE_TOLERANCE_SEC: return None
+    weeks_since = max(0, (now - born_ts) // week)
     next_wipe = born_ts + (weeks_since + 1) * week
     return {
         "last_wipe_ts": born_ts,

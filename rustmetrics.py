@@ -2349,7 +2349,7 @@ def remove_watch_player(user_id: int, watch_id: int):
                     (watch_id, user_id))
 
 
-RHYTHM_MAX_ROWS = 2000   # pro Quelle; 7 Tage mit Minutentakt-Sessions bleiben weit darunter
+RHYTHM_MAX_ROWS = 2000   # pro Quelle; wird es knapp, gewinnen die neuesten Sessions (ORDER BY ... DESC)
 
 
 def _presence_session_rows(cur, steam_id: int | None, since: int, now: int) -> list[tuple]:
@@ -2357,7 +2357,7 @@ def _presence_session_rows(cur, steam_id: int | None, since: int, now: int) -> l
         return []
     cur.execute("SELECT start_ts, end_ts FROM presence_sessions "
                 "WHERE steam_id=%s AND start_ts < %s AND (end_ts IS NULL OR end_ts > %s) "
-                "ORDER BY start_ts LIMIT %s", (steam_id, now, since, RHYTHM_MAX_ROWS))
+                "ORDER BY start_ts DESC LIMIT %s", (steam_id, now, since, RHYTHM_MAX_ROWS))
     return [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
 
 
@@ -2365,13 +2365,13 @@ def _server_session_rows(cur, watched: dict, since: int, now: int) -> list[tuple
     """player_sessions per Name auf dem gewatchten Server, zusaetzlich per BM-ID (alle Server)."""
     window = "start_ts < %s AND (end_ts IS NULL OR end_ts > %s)"
     cur.execute(f"SELECT start_ts, end_ts FROM player_sessions WHERE server_id=%s "
-                f"AND lower(player_name)=lower(%s) AND {window} ORDER BY start_ts LIMIT %s",
+                f"AND lower(player_name)=lower(%s) AND {window} ORDER BY start_ts DESC LIMIT %s",
                 (watched["server_id"], watched["name"], now, since, RHYTHM_MAX_ROWS))
     rows = [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
     if not watched.get("bm_player_id"):
         return rows
     cur.execute(f"SELECT start_ts, end_ts FROM player_sessions WHERE bm_player_id=%s "
-                f"AND {window} ORDER BY start_ts LIMIT %s",
+                f"AND {window} ORDER BY start_ts DESC LIMIT %s",
                 (watched["bm_player_id"], now, since, RHYTHM_MAX_ROWS))
     return rows + [(r["start_ts"], r["end_ts"]) for r in cur.fetchall()]
 

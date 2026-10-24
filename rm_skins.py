@@ -332,8 +332,17 @@ def download_skin_icon(cdn_url: str, dest_path: str) -> None:
     if not body.startswith(_PNG_MAGIC):
         raise ValueError(f"Antwort ist kein PNG (CDN-URL: {cdn_url})")
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    with open(dest_path, "wb") as f:
-        f.write(body)
+    # Erst Temp-Datei, dann os.replace: ein abgebrochener Schreibvorgang darf
+    # kein halbes PNG hinterlassen, das danach an Browser ausgeliefert wird.
+    tmp_path = f"{dest_path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(body)
+        os.replace(tmp_path, dest_path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
 def enrich_skin_image_urls(

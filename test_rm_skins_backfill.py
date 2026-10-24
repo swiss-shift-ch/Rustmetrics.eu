@@ -95,6 +95,27 @@ class TestDownloadSkinIcon:
             rm_skins.download_skin_icon("https://cdn.example/x", str(dest))
         assert dest.read_bytes() == body
 
+    def test_failed_write_keeps_existing_icon_intact(self, tmp_path):
+        dest = tmp_path / "out.png"
+        old = rm_skins._PNG_MAGIC + b"old-icon"
+        dest.write_bytes(old)
+        fake = _FakeResponse(rm_skins._PNG_MAGIC + b"new-icon")
+        with mock.patch.object(rm_skins.urllib.request, "urlopen", return_value=fake), \
+                mock.patch.object(rm_skins.os, "replace", side_effect=OSError("disk full")):
+            with pytest.raises(OSError):
+                rm_skins.download_skin_icon("https://cdn.example/x", str(dest))
+        assert dest.read_bytes() == old
+        assert [p.name for p in tmp_path.iterdir()] == ["out.png"]
+
+    def test_success_leaves_no_temp_files(self, tmp_path):
+        dest = tmp_path / "out.png"
+        dest.write_bytes(rm_skins._PNG_MAGIC + b"old-icon")
+        fake = _FakeResponse(rm_skins._PNG_MAGIC + b"new-icon")
+        with mock.patch.object(rm_skins.urllib.request, "urlopen", return_value=fake):
+            rm_skins.download_skin_icon("https://cdn.example/x", str(dest))
+        assert dest.read_bytes() == rm_skins._PNG_MAGIC + b"new-icon"
+        assert [p.name for p in tmp_path.iterdir()] == ["out.png"]
+
     def test_raises_runtime_error_on_429_instead_of_generic_failure(self):
         with mock.patch.object(rm_skins.urllib.request, "urlopen", side_effect=_http_429()):
             with pytest.raises(RuntimeError):

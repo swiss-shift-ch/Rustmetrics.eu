@@ -28,14 +28,26 @@ def canonical_redirect_location(host_header: str | None, request_path: str, orig
     return f"{origin.rstrip('/')}{path}"
 
 
+def _as_int(value, default: int = 0) -> int:
+    """Upstream (BattleMetrics) values as int; anything unparseable becomes the default."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _has_valid_port(server: dict) -> bool:
+    return 1 <= _as_int(server.get("port")) <= 65535
+
+
 def _browser_row_html(server: dict) -> str:
-    href = f"/server/{quote(str(server['host']), safe='')}:{int(server['port'])}"
+    href = f"/server/{quote(str(server['host']), safe='')}:{_as_int(server['port'])}"
     return (
         '<div class="browse-row">'
         f'<div class="brow-name"><a class="brow-link" href="{escape(href)}">'
         f"<strong>{escape(str(server.get('name') or ''))}</strong></a></div>"
-        f'<div class="brow-pop">{int(server.get("players_count") or 0)}'
-        f'<span class="max">/{int(server.get("max_players") or 0)}</span></div>'
+        f'<div class="brow-pop">{_as_int(server.get("players_count"))}'
+        f'<span class="max">/{_as_int(server.get("max_players"))}</span></div>'
         f'<div class="brow-map">{escape(str(server.get("map") or "—"))}</div>'
         '<div class="brow-wipe">—</div>'
         '<div class="brow-actions"></div></div>'
@@ -44,8 +56,8 @@ def _browser_row_html(server: dict) -> str:
 
 def browser_rows_html(servers: list[dict], limit: int = BROWSER_ROWS_MAX) -> str:
     ranked = sorted(
-        (s for s in servers if s.get("host") and s.get("port")),
-        key=lambda s: s.get("players_count") or 0,
+        (s for s in servers if s.get("host") and _has_valid_port(s)),
+        key=lambda s: _as_int(s.get("players_count")),
         reverse=True,
     )
     return "".join(_browser_row_html(s) for s in ranked[:limit])

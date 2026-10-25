@@ -41,6 +41,23 @@ class BrowserRowsTest(unittest.TestCase):
         self.assertNotIn("<script>", html)
         self.assertNotIn("no address", html)
 
+    def test_skips_rows_with_unusable_port_instead_of_failing_the_page(self):
+        servers = [_server(1, 5), _server(2, 9, port="abc"), _server(3, 8, port=0), _server(4, 7, port=70000)]
+        html = browser_rows_html(servers)
+        self.assertIn("/server/203.0.113.1:28015", html)
+        self.assertEqual(html.count('class="browse-row"'), 1)
+
+    def test_rows_with_unusable_port_do_not_use_up_the_row_cap(self):
+        broken = [_server(i % 250, 1000 + i, port="abc") for i in range(BROWSER_ROWS_MAX)]
+        html = browser_rows_html(broken + [_server(1, 5)])
+        self.assertIn("/server/203.0.113.1:28015", html)
+
+    def test_non_numeric_player_counts_render_as_zero(self):
+        servers = [_server(1, "n/a", max_players="?"), _server(2, 40)]
+        html = browser_rows_html(servers)
+        self.assertLess(html.index("/server/203.0.113.2:28015"), html.index("/server/203.0.113.1:28015"))
+        self.assertIn('<div class="brow-pop">0<span class="max">/0</span></div>', html)
+
     def test_caps_row_count(self):
         html = browser_rows_html([_server(i % 250, i) for i in range(BROWSER_ROWS_MAX + 50)])
         self.assertEqual(html.count('class="browse-row"'), BROWSER_ROWS_MAX)

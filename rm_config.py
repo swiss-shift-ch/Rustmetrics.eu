@@ -30,7 +30,10 @@ ADMIN_STEAMIDS   = set(
 )
 STEAM_API_KEY    = _env("RM_STEAM_API_KEY", "") or None
 SESSION_TTL      = _env("RM_SESSION_TTL", 30 * 86400, int)
-POLL_INTERVAL    = _env("RM_POLL_INTERVAL_SEC", 20, int)
+# Untergrenze: bei 0/negativ liefe poller_loop ohne Pause (Dauer-Abfrage aller
+# Server bzw. Fehler-Spam, wenn die DB weg ist).
+POLL_INTERVAL_MIN = 5
+POLL_INTERVAL    = max(POLL_INTERVAL_MIN, _env("RM_POLL_INTERVAL_SEC", 20, int))
 A2S_TIMEOUT      = _env("RM_A2S_TIMEOUT_SEC", 3.0, float)
 SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)
 # Wie lange die volle Spielerliste pro Snapshot aufgehoben wird. Danach bleibt

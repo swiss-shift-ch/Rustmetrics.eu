@@ -31,15 +31,19 @@ ADMIN_STEAMIDS   = set(
 STEAM_API_KEY    = _env("RM_STEAM_API_KEY", "") or None
 SESSION_TTL      = _env("RM_SESSION_TTL", 30 * 86400, int)
 POLL_INTERVAL    = _env("RM_POLL_INTERVAL_SEC", 20, int)
-A2S_TIMEOUT      = _env("RM_A2S_TIMEOUT_SEC", 3.0, float)
+# Untergrenze: 0 machte den Socket nicht-blockierend (jeder Server «offline»),
+# negativ warf ValueError.
+A2S_TIMEOUT_MIN  = 0.5
+A2S_TIMEOUT      = max(A2S_TIMEOUT_MIN, _env("RM_A2S_TIMEOUT_SEC", 3.0, float))
 SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)
 # Wie lange die volle Spielerliste pro Snapshot aufgehoben wird. Danach bleibt
 # der Snapshot (fuer den Graphen), nur players_json wird geleert.
 PLAYERS_JSON_KEEP_H = _env("RM_PLAYERS_JSON_KEEP_HOURS", 24, int)
 
 BROWSE_CACHE_TTL = _env("RM_BROWSE_CACHE_TTL", 180, int)
-BROWSE_PARALLEL  = _env("RM_BROWSE_PARALLEL", 80, int)
-BROWSE_TIMEOUT   = _env("RM_BROWSE_A2S_TIMEOUT", 2.5, float)
+# ThreadPoolExecutor(max_workers=0) wirft ValueError → Browse brach ab.
+BROWSE_PARALLEL  = max(1, _env("RM_BROWSE_PARALLEL", 80, int))
+BROWSE_TIMEOUT   = max(A2S_TIMEOUT_MIN, _env("RM_BROWSE_A2S_TIMEOUT", 2.5, float))
 # BattleMetrics paginiert mit max. 100 Servern/Page. Früher hart auf 8 Pages
 # (= 800 Server) begrenzt — dadurch zeigte der Browser "800 of 800 online".
 # Jetzt limit-getrieben mit konfigurierbarer Obergrenze (40 Pages = 4000 Server;

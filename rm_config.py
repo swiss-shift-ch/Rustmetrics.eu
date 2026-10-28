@@ -32,10 +32,14 @@ STEAM_API_KEY    = _env("RM_STEAM_API_KEY", "") or None
 SESSION_TTL      = _env("RM_SESSION_TTL", 30 * 86400, int)
 POLL_INTERVAL    = _env("RM_POLL_INTERVAL_SEC", 20, int)
 A2S_TIMEOUT      = _env("RM_A2S_TIMEOUT_SEC", 3.0, float)
-SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)
+# Untergrenze: bei 0/negativ laege der Cutoff in _cleanup_old bei "jetzt" oder
+# in der Zukunft → alle Snapshots und Sessions (auch offene) wuerden geloescht.
+SNAPSHOT_TTL_DAY_MIN = 1
+SNAPSHOT_TTL_DAY = max(SNAPSHOT_TTL_DAY_MIN, _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int))
 # Wie lange die volle Spielerliste pro Snapshot aufgehoben wird. Danach bleibt
 # der Snapshot (fuer den Graphen), nur players_json wird geleert.
-PLAYERS_JSON_KEEP_H = _env("RM_PLAYERS_JSON_KEEP_HOURS", 24, int)
+PLAYERS_JSON_KEEP_H_MIN = 1
+PLAYERS_JSON_KEEP_H = max(PLAYERS_JSON_KEEP_H_MIN, _env("RM_PLAYERS_JSON_KEEP_HOURS", 24, int))
 
 BROWSE_CACHE_TTL = _env("RM_BROWSE_CACHE_TTL", 180, int)
 BROWSE_PARALLEL  = _env("RM_BROWSE_PARALLEL", 80, int)

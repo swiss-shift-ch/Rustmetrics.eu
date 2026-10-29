@@ -89,7 +89,10 @@ RUST_STATS_CACHE_TTL = _env("RM_RUST_STATS_CACHE_TTL", 3600, int)
 # Servern mit server.censorplayerlist/Streamer-Mode, z.B. Facepunch-Officials).
 # GetPlayerSummaries erlaubt 100 IDs pro Call; 60s-Intervall ist weit unter
 # Steams Rate-Limit (100k Calls/Tag).
-PRESENCE_POLL_SEC = _env("RM_PRESENCE_POLL_SEC", 60, int)
+# Untergrenze: bei 0/negativ liefe der Presence-Poller ohne Pause (Steam-API
+# bis zum Rate-Limit) und PRESENCE_STALE_SEC waere 0 → offene Sessions sofort zu.
+PRESENCE_POLL_SEC_MIN = 10
+PRESENCE_POLL_SEC = max(PRESENCE_POLL_SEC_MIN, _env("RM_PRESENCE_POLL_SEC", 60, int))
 
 # Region-Mapping für BM (BM filtert nach ISO-Ländercodes statt Steam-Region-Bytes)
 REGION_TO_COUNTRIES = {

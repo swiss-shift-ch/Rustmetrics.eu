@@ -1822,7 +1822,10 @@ def steam_presence_loop():
 # Fester Worker-Pool statt "ein Thread pro Server pro Runde". Verhindert
 # Thread-Explosion und Erschoepfung des DB-Pools, wenn viele Server beobachtet
 # werden (vorher: 500 Server = 500 gleichzeitige Threads + 500 DB-Connections).
-POLL_WORKERS = _env("RM_POLL_WORKERS", 16, int)
+# Untergrenze: bei 0/negativ wirft ThreadPoolExecutor schon beim Import einen
+# ValueError → der ganze Dienst startet nicht.
+POLL_WORKERS_MIN = 1
+POLL_WORKERS = max(POLL_WORKERS_MIN, _env("RM_POLL_WORKERS", 16, int))
 _poll_pool = ThreadPoolExecutor(max_workers=POLL_WORKERS, thread_name_prefix="poll")
 _poll_stats = {"ok": 0, "err": 0}
 

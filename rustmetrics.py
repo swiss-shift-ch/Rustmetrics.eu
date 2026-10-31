@@ -15,6 +15,7 @@ Konfiguration über Environment-Variablen (siehe .env.example).
 
 from __future__ import annotations
 
+import calendar
 import ipaddress
 import json
 import glob
@@ -2858,6 +2859,14 @@ def api_skins_items() -> dict:
     return {"items": list(items.values())}
 
 
+def _caddy_console_ts(line: str) -> float | None:
+    """Zeitstempel vom Zeilenanfang des console-Formats (UTC), sonst None."""
+    try:
+        return float(calendar.timegm(time.strptime(line[:19], "%Y/%m/%d %H:%M:%S")))
+    except ValueError:
+        return None
+
+
 def parse_caddy_log_tail(path: str = None, max_bytes: int = None) -> dict:
     """
     Liest die letzten max_bytes des Caddy-Access-Logs und extrahiert:
@@ -2962,14 +2971,13 @@ def parse_caddy_log_tail(path: str = None, max_bytes: int = None) -> dict:
                         reddit_hits += 1
                 except Exception:
                     pass
-        if m_ts:
-            try:
-                t = float(m_ts.group(1))
-                if t >= cutoff_24h:
-                    hkey = time.strftime("%Y-%m-%d %H", time.gmtime(t))
-                    hour_counter[hkey] = hour_counter.get(hkey, 0) + 1
-            except ValueError:
-                pass
+        try:
+            t = float(m_ts.group(1)) if m_ts else _caddy_console_ts(line)
+        except ValueError:
+            t = None
+        if t is not None and t >= cutoff_24h:
+            hkey = time.strftime("%Y-%m-%d %H", time.gmtime(t))
+            hour_counter[hkey] = hour_counter.get(hkey, 0) + 1
 
     out["hits_total"]   = total
     out["unique_ips"]   = len(ips)

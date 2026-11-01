@@ -2940,14 +2940,13 @@ def parse_caddy_log_tail(path: str = None, max_bytes: int = None) -> dict:
         if m_st and int(m_st.group(1)) >= 400:
             continue
         total += 1
-        uri = m_uri.group(1)
+        # nur den "Pfad-Stamm" (ohne Query) — Assets kommen mit ?v=…
+        stem = m_uri.group(1).split("?", 1)[0]
         # API/static rausfiltern für Top-Paths
-        if not (uri.startswith("/api/") or uri.startswith("/favicon")
-                or uri.endswith(".css") or uri.endswith(".js")
-                or uri.endswith(".png") or uri.endswith(".svg")
-                or uri.endswith(".ico") or uri.endswith(".webmanifest")):
-            # nur den "Pfad-Stamm" (ohne Query)
-            stem = uri.split("?", 1)[0]
+        if not (stem.startswith("/api/") or stem.startswith("/favicon")
+                or stem.endswith(".css") or stem.endswith(".js")
+                or stem.endswith(".png") or stem.endswith(".svg")
+                or stem.endswith(".ico") or stem.endswith(".webmanifest")):
             path_counter[stem] = path_counter.get(stem, 0) + 1
         if m_ip:
             ips.add(m_ip.group(1))

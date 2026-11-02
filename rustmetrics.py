@@ -3867,6 +3867,12 @@ def _public_404_html(host: str, port: int) -> str:
 #  HTTP-HANDLER
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _str_field(body: dict, key: str) -> str:
+    """Getrimmter String aus einem JSON-Body; alles andere (Zahl, Liste, null) zaehlt als leer."""
+    value = body.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
 class Handler(SimpleHTTPRequestHandler):
     server_version = "RustMetrics/1.0"
 
@@ -3914,8 +3920,11 @@ class Handler(SimpleHTTPRequestHandler):
             # Ohne Cap kann ein Client mit Content-Length: 2000000000 den
             # Prozess in eine 2-GB-Allokation treiben.
             return {}
-        try: return json.loads(self.rfile.read(length).decode("utf-8"))
+        try: data = json.loads(self.rfile.read(length).decode("utf-8"))
         except Exception: return {}
+        # Gueltiges JSON wie [] oder null wuerde sonst beim body.get() der
+        # Aufrufer ausserhalb jedes try scheitern: Verbindung bricht ohne Antwort ab.
+        return data if isinstance(data, dict) else {}
 
     def _fail(self, e: Exception, ctx: str = "") -> None:
         """
@@ -4303,7 +4312,7 @@ class Handler(SimpleHTTPRequestHandler):
 
         if u.path == "/api/servers":
             body = self._read_json()
-            host = (body.get("host") or "").strip()
+            host = _str_field(body, "host")
             try: port = int(body.get("port") or 0)
             except (TypeError, ValueError): port = 0
             if not host or not (0 < port < 65536):
@@ -4323,7 +4332,7 @@ class Handler(SimpleHTTPRequestHandler):
             try: sid = int(parts[2])
             except ValueError: return self._json({"error": "bad id"}, 400)
             body = self._read_json()
-            name = (body.get("name") or "").strip()
+            name = _str_field(body, "name")
             if not name: return self._json({"error": "name required"}, 400)
             try:
                 # SteamID64 / Profil-URL erkannt? → Presence-Tracking statt
@@ -4515,7 +4524,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _api_save_settings(self, user_id: int):
         body = self._read_json()
-        webhook = (body.get("discord_webhook") or "").strip() or None
+        # Das Frontend sendet das Feld immer. Fehlt es, war der Body unlesbar;
+        # gespeichert wuerde sonst der Webhook des Nutzers geloescht.
+        if "discord_webhook" not in body:
+            return self._json({"error": "discord_webhook required"}, 400)
+        if not isinstance(body["discord_webhook"], str | None):
+            return self._json({"error": "invalid Discord webhook URL"}, 400)
+        webhook = _str_field(body, "discord_webhook") or None
         notify_online  = bool(body.get("notify_online",  True))
         notify_offline = bool(body.get("notify_offline", False))
         # Validate Discord webhook

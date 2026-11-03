@@ -44,9 +44,11 @@ BROWSE_TIMEOUT   = _env("RM_BROWSE_A2S_TIMEOUT", 2.5, float)
 # (= 800 Server) begrenzt — dadurch zeigte der Browser "800 of 800 online".
 # Jetzt limit-getrieben mit konfigurierbarer Obergrenze (40 Pages = 4000 Server;
 # BM erlaubt unauth ~60 req/min, also nicht beliebig hochdrehen).
-BROWSE_BM_MAX_PAGES = _env("RM_BROWSE_BM_MAX_PAGES", 40, int)
+# Untergrenze 1: bei 0 holt query_battlemetrics keine Page (Regionen-Browser leer).
+BROWSE_BM_MAX_PAGES = max(1, _env("RM_BROWSE_BM_MAX_PAGES", 40, int))
 # Hartes Cap für den ?limit=-Parameter von /api/browse (Zeilen pro Response).
-BROWSE_RESULT_CAP   = _env("RM_BROWSE_RESULT_CAP", 2000, int)
+# Untergrenze 1: 0 liefert immer leere Seiten, negativ schneidet per Slice von hinten ab.
+BROWSE_RESULT_CAP   = max(1, _env("RM_BROWSE_RESULT_CAP", 2000, int))
 
 RL_BROWSE_PER_H  = _env("RM_RL_BROWSE_PER_HOUR", 12, int)
 RL_REQ_PER_MIN   = _env("RM_RL_REQUESTS_PER_MIN", 120, int)

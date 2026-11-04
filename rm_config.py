@@ -48,8 +48,10 @@ BROWSE_BM_MAX_PAGES = _env("RM_BROWSE_BM_MAX_PAGES", 40, int)
 # Hartes Cap für den ?limit=-Parameter von /api/browse (Zeilen pro Response).
 BROWSE_RESULT_CAP   = _env("RM_BROWSE_RESULT_CAP", 2000, int)
 
-RL_BROWSE_PER_H  = _env("RM_RL_BROWSE_PER_HOUR", 12, int)
-RL_REQ_PER_MIN   = _env("RM_RL_REQUESTS_PER_MIN", 120, int)
+# Untergrenze 1: bei 0/negativ hat der TokenBucket Kapazitaet <= 0 und jede
+# Anfrage (bzw. jeder Browse-Miss) bekommt 429 — die Seite waere komplett gesperrt.
+RL_BROWSE_PER_H  = max(1, _env("RM_RL_BROWSE_PER_HOUR", 12, int))
+RL_REQ_PER_MIN   = max(1, _env("RM_RL_REQUESTS_PER_MIN", 120, int))
 
 # Caddy-Access-Log Pfad (für /admin/stats Page). Auf nicht-existierende Datei
 # fällt der Parser still zurück auf "log unavailable".

@@ -54,7 +54,9 @@ RL_REQ_PER_MIN   = _env("RM_RL_REQUESTS_PER_MIN", 120, int)
 # Caddy-Access-Log Pfad (für /admin/stats Page). Auf nicht-existierende Datei
 # fällt der Parser still zurück auf "log unavailable".
 CADDY_LOG_PATH   = _env("RM_CADDY_LOG", "/var/log/caddy/rustmetrics.log")
-CADDY_LOG_MAX_BYTES = _env("RM_CADDY_LOG_MAX_BYTES", 5 * 1024 * 1024, int)  # nur die letzten 5 MB lesen
+# Nur die letzten 5 MB lesen. Untergrenze 64 KB: bei 0/negativ las der Parser
+# nichts (seek ans Ende) und /admin/stats blieb still leer.
+CADDY_LOG_MAX_BYTES = max(64 * 1024, _env("RM_CADDY_LOG_MAX_BYTES", 5 * 1024 * 1024, int))
 
 ROOT             = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR       = os.path.join(ROOT, "static")

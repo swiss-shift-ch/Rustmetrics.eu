@@ -29,7 +29,9 @@ ADMIN_STEAMIDS   = set(
     s.strip() for s in (_env("RM_ADMIN_STEAMIDS", "") or "").split(",") if s.strip()
 )
 STEAM_API_KEY    = _env("RM_STEAM_API_KEY", "") or None
-SESSION_TTL      = _env("RM_SESSION_TTL", 30 * 86400, int)
+# Untergrenze 1 h: bei 0/negativ ist jede neue Session sofort abgelaufen und das
+# Cookie bekommt max-age <= 0 — Steam-Login klappt, man ist aber nie eingeloggt.
+SESSION_TTL      = max(3600, _env("RM_SESSION_TTL", 30 * 86400, int))
 POLL_INTERVAL    = _env("RM_POLL_INTERVAL_SEC", 20, int)
 A2S_TIMEOUT      = _env("RM_A2S_TIMEOUT_SEC", 3.0, float)
 SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)

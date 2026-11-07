@@ -37,7 +37,10 @@ SNAPSHOT_TTL_DAY = _env("RM_SNAPSHOTS_KEEP_DAYS", 14, int)
 # der Snapshot (fuer den Graphen), nur players_json wird geleert.
 PLAYERS_JSON_KEEP_H = _env("RM_PLAYERS_JSON_KEEP_HOURS", 24, int)
 
-BROWSE_CACHE_TTL = _env("RM_BROWSE_CACHE_TTL", 180, int)
+# Untergrenze 60 s: bei 0/negativ trifft der Browse-Cache nie, der Warm-Poller
+# laedt alle 15 s alle Regionen neu und /server/<host>:<port> findet den
+# Steam-Fallback nie (404 fuer nicht-gewatchte Server).
+BROWSE_CACHE_TTL = max(60, _env("RM_BROWSE_CACHE_TTL", 180, int))
 BROWSE_PARALLEL  = _env("RM_BROWSE_PARALLEL", 80, int)
 BROWSE_TIMEOUT   = _env("RM_BROWSE_A2S_TIMEOUT", 2.5, float)
 # BattleMetrics paginiert mit max. 100 Servern/Page. Früher hart auf 8 Pages

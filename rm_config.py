@@ -78,8 +78,10 @@ BATTLEMETRICS_PLAYER_URL = "https://api.battlemetrics.com/players"
 # und Log-Rauschen. Deshalb: optionaler Token + Schutzschalter, der nach
 # mehreren 403ern zumacht und es erst nach BM_BREAKER_COOLDOWN wieder versucht.
 BM_TOKEN            = _env("RM_BM_TOKEN", "") or None
-BM_BREAKER_FAILS    = _env("RM_BM_BREAKER_FAILS", 3, int)
-BM_BREAKER_COOLDOWN = _env("RM_BM_BREAKER_COOLDOWN", 21600, int)   # 6h
+# Untergrenzen: Cooldown 0/negativ setzt blocked_until in die Vergangenheit,
+# der Schalter oeffnet nie und jeder Aufruf laeuft wieder in den 403.
+BM_BREAKER_FAILS    = max(1, _env("RM_BM_BREAKER_FAILS", 3, int))
+BM_BREAKER_COOLDOWN = max(60, _env("RM_BM_BREAKER_COOLDOWN", 21600, int))   # 6h
 BM_USER_AGENT       = "RustMetrics/1.0 (+https://rustmetrics.eu)"
 
 # Cache-TTL für Rust-Stats (Steam-Counter ändern sich langsam, 1h reicht für Live-Page).

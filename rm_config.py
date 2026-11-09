@@ -83,7 +83,8 @@ BM_BREAKER_COOLDOWN = _env("RM_BM_BREAKER_COOLDOWN", 21600, int)   # 6h
 BM_USER_AGENT       = "RustMetrics/1.0 (+https://rustmetrics.eu)"
 
 # Cache-TTL für Rust-Stats (Steam-Counter ändern sich langsam, 1h reicht für Live-Page).
-RUST_STATS_CACHE_TTL = _env("RM_RUST_STATS_CACHE_TTL", 3600, int)
+# Untergrenze: 0/negativ hebelt den Cache aus, jeder Profilaufruf fragt Steam neu.
+RUST_STATS_CACHE_TTL = max(60, _env("RM_RUST_STATS_CACHE_TTL", 3600, int))
 
 # Steam-Presence-Polling (Watched Players per SteamID64 — funktioniert auch auf
 # Servern mit server.censorplayerlist/Streamer-Mode, z.B. Facepunch-Officials).

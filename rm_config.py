@@ -109,7 +109,9 @@ REGION_TO_COUNTRIES = {
 # Netzwerke (Moose, Rustafied, Facepunch-Officials) fehlen dann einfach
 # und die Suche findet sie nie, weil sie nur den Cache filtert.
 # 20000 holt die komplette Liste in einem Call (~3-5 MB JSON).
-BROWSE_MASTER_LIMIT = _env("RM_BROWSE_MASTER_LIMIT", 20000, int)
+# Untergrenze: 0 → BM holt 0 Pages (Browse leer), negativ schneidet
+# query_battlemetrics per fetched[:limit] die Liste von hinten ab.
+BROWSE_MASTER_LIMIT = max(1, _env("RM_BROWSE_MASTER_LIMIT", 20000, int))
 # Steams Region-Byte im GetServerList-Filter; 0xFF = "keine Region-Einschraenkung".
 STEAM_REGION_ALL = 0xFF
 REGION_BYTES     = {

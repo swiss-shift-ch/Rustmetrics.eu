@@ -5,13 +5,18 @@ keine Abhaengigkeiten auf andere rm_*-Module (unterste Schicht).
 """
 from __future__ import annotations
 
+import math
 import os
 
 def _env(k, d=None, cast=str):
     v = os.environ.get(k, d)
     if v is None: return None
-    try: return cast(v)
+    try: out = cast(v)
     except Exception: return d
+    # float() akzeptiert "nan"/"inf" — als Timeout/Intervall unbrauchbar
+    # (socket.settimeout(inf) → OverflowError), daher wie ungueltig behandeln.
+    if isinstance(out, float) and not math.isfinite(out): return d
+    return out
 
 HOST            = _env("RM_HOST", "127.0.0.1")
 PORT            = _env("RM_PORT", 8765, int)

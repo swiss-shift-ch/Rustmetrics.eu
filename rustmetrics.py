@@ -805,9 +805,14 @@ def submit_game_score(user_id: int, game: str, score: int,
         return False, "unknown game"
     if not isinstance(score, int) or not (0 <= score <= FLAP_MAX_SCORE):
         return False, "invalid score range"
+    dur = None
     if duration_ms is not None:
+        # Negative/ungueltige Dauer umging sonst die "zu kurz"-Pruefung (dur > 0)
+        # bzw. endete erst beim INSERT als "db error".
         try: dur = int(duration_ms)
-        except (TypeError, ValueError): dur = 0
+        except (TypeError, ValueError): return False, "invalid duration"
+        if dur < 0:
+            return False, "invalid duration"
         min_expected_ms = score * FLAP_MIN_MS_PER_POINT - FLAP_START_BUFFER_MS
         if dur > 0 and score > 0 and dur < min_expected_ms:
             return False, "duration implausibly short for score"
@@ -821,9 +826,7 @@ def submit_game_score(user_id: int, game: str, score: int,
             cur.execute(
                 "INSERT INTO game_scores (user_id, game, score, duration_ms, played_at) "
                 "VALUES (%s,%s,%s,%s,%s)",
-                (user_id, game, int(score),
-                 int(duration_ms) if duration_ms is not None else None,
-                 int(time.time())))
+                (user_id, game, int(score), dur, int(time.time())))
     except Exception as e:
         return False, f"db error: {type(e).__name__}: {e}"
     return True, None

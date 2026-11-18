@@ -65,6 +65,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
+from rm_ics import ics_wipe_base_ts
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
 
@@ -1048,7 +1049,7 @@ def render_wipes_ics(user_id: int) -> str:
             kw = (snap.get("keywords") or "")
             srv_label = snap.get("name") or s["srv_name"] or f"{s['host']}:{s['port']}"
             parsed = parse_rust_keywords(kw)
-            born_ts = parsed.get("born_ts")
+            born_ts = ics_wipe_base_ts(parsed.get("born_ts"), now)
             if not born_ts:
                 continue
 

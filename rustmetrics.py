@@ -64,6 +64,7 @@ from rm_rust import (  # noqa: F401
 )
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
+from rm_hostport import split_host_port
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
@@ -2261,11 +2262,7 @@ def normalize_server_input(host: str, port: int) -> tuple[str, int]:
     if h.lower().startswith(("http://", "https://")):
         raise ValueError("that's a URL, not a server address — use IP or hostname")
     # "host:port" im Host-Feld: Port daraus uebernehmen (schlaegt das Formularfeld)
-    if h.count(":") == 1:
-        left, right = h.rsplit(":", 1)
-        if right.isdigit() and 0 < int(right) < 65536 and left:
-            h, port = left, int(right)
-    return h.strip("/ "), port
+    return split_host_port(h, port)
 
 
 def validate_public_host(host: str, port: int) -> None:

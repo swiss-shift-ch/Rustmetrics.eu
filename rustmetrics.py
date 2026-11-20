@@ -65,6 +65,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
+from rm_token import is_plausible_calendar_token
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
 
@@ -989,7 +990,7 @@ def reset_calendar_token(user_id: int) -> str:
 
 def lookup_user_by_calendar_token(token: str) -> int | None:
     """Findet den User zu einem Calendar-Token. None wenn unbekannt."""
-    if not token or len(token) < 16:
+    if not is_plausible_calendar_token(token):
         return None
     with _Conn() as (conn, cur):
         cur.execute("SELECT id FROM users WHERE calendar_token=%s", (token,))

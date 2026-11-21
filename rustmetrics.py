@@ -1261,13 +1261,13 @@ def upsert_player_meta(cur, pairs: list[tuple[int, str]], ts: int | None = None)
 
 
 # ─── Discord-Webhook-Dispatcher ─────────────────────────────────────────
-DISCORD_WEBHOOK_RE = re.compile(
-    r"^https://(?:ptb\.|canary\.)?(?:discord|discordapp)\.com/api/webhooks/\d+/[A-Za-z0-9_\-]+/?$"
+DISCORD_WEBHOOK_RE = re.compile(  # mit fullmatch verwenden: `$` liesse ein "\n" am Ende durch
+    r"https://(?:ptb\.|canary\.)?(?:discord|discordapp)\.com/api/webhooks/\d+/[A-Za-z0-9_\-]+/?"
 )
 _webhook_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="webhook")
 
 def is_valid_discord_webhook(url: str) -> bool:
-    return bool(url and DISCORD_WEBHOOK_RE.match(url))
+    return bool(url and DISCORD_WEBHOOK_RE.fullmatch(url))
 
 def _post_discord_webhook(url: str, payload: dict) -> tuple[bool, str]:
     try:

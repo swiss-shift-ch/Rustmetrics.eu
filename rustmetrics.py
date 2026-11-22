@@ -65,6 +65,7 @@ from rm_rust import (  # noqa: F401
 from rm_db import init_pool, _Conn, ensure_migrations, ensure_indexes  # noqa: F401
 from rm_seo import canonical_redirect_location, render_browser_page
 from rm_activity import ACTIVITY_TS_SQL, should_touch_last_seen
+from rm_openid import openid_precheck
 from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACES
 
 
@@ -544,8 +545,6 @@ def _cached_browse_servers() -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 STEAM_OPENID_URL = "https://steamcommunity.com/openid/login"
-STEAM_ID_PATTERN = re.compile(r"^https?://steamcommunity\.com/openid/id/(\d+)$")
-
 # OpenID-Nonce-Replay-Schutz (Sicherheits-Audit #6)
 _openid_nonces: dict[str, float] = {}
 _openid_nonce_lock = threading.Lock()
@@ -584,18 +583,12 @@ def steam_verify(query: dict) -> int | None:
     Verifiziert eine OpenID-Antwort von Steam via check_authentication.
     Gibt SteamID64 (int) zurück bei Erfolg, sonst None.
     """
-    if query.get("openid.mode") != "id_res": return None
-    claimed = query.get("openid.claimed_id", "")
-    m = STEAM_ID_PATTERN.match(claimed)
-    if not m: return None
-    steamid64 = int(m.group(1))
-    # return_to muss zu unserer Domain passen
-    expected_return = f"{ORIGIN}/auth/steam/callback"
-    if not query.get("openid.return_to", "").startswith(expected_return):
-        return None
+    # mode, claimed_id (fullmatch, ASCII-Ziffern), return_to auf unserer Domain, Nonce vorhanden
+    steamid64 = openid_precheck(query, ORIGIN)
+    if steamid64 is None: return None
     # Replay-Schutz: Steam-Nonce nur einmal akzeptieren
-    nonce = query.get("openid.response_nonce", "")
-    if nonce and _openid_nonce_seen(nonce):
+    nonce = query["openid.response_nonce"]
+    if _openid_nonce_seen(nonce):
         print(f"[openid] replay attempt rejected (nonce={nonce[:30]}…)", file=sys.stderr, flush=True)
         return None
     # check_authentication: alle Parameter zurück an Steam, mode überschreiben

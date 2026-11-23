@@ -51,6 +51,7 @@ from rm_config import (  # noqa: F401
     STEAM_REGION_ALL, REGION_BYTES, COOKIE_NAME,
 )
 from rm_a2s import query_a2s  # noqa: F401
+from rm_ids import parse_pg_id
 from rm_rhythm import (ACTION_CLOSE, ACTION_OPEN, PRESENCE_STALE_POLLS, RHYTHM_WINDOW_SEC,
                        build_rhythm, presence_session_actions, stale_session_end)
 from rm_a2s_blocklist import (MODE_FULL, PLAYER_LIST_FROM_BM_MODES, A2SBlocklist,
@@ -4036,8 +4037,8 @@ class Handler(SimpleHTTPRequestHandler):
             if len(parts) == 3:
                 sess = self._read_session()
                 if not sess: return self._json({"error": "auth required"}, 401)
-                try: sid = int(parts[2])
-                except ValueError: return self._json({"error": "bad id"}, 400)
+                sid = parse_pg_id(parts[2])
+                if sid is None: return self._json({"error": "bad id"}, 400)
                 qs = urllib.parse.parse_qs(u.query)
                 # Ungeprueft konnte ?hours=abc einen 500er ohne Antwort und
                 # ?hours=99999999 einen Full-Table-Scan ueber alle Snapshots ausloesen.
@@ -4320,8 +4321,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "server"
                 and parts[3] == "watch"):
-            try: sid = int(parts[2])
-            except ValueError: return self._json({"error": "bad id"}, 400)
+            sid = parse_pg_id(parts[2])
+            if sid is None: return self._json({"error": "bad id"}, 400)
             body = self._read_json()
             name = (body.get("name") or "").strip()
             if not name: return self._json({"error": "name required"}, 400)
@@ -4419,15 +4420,15 @@ class Handler(SimpleHTTPRequestHandler):
         parts = u.path.strip("/").split("/")
         # /api/server/:id
         if len(parts) == 3 and parts[0] == "api" and parts[1] == "server":
-            try: sid = int(parts[2])
-            except ValueError: return self._json({"error": "bad id"}, 400)
+            sid = parse_pg_id(parts[2])
+            if sid is None: return self._json({"error": "bad id"}, 400)
             remove_watch_server(sess["user_id"], sid)
             return self._json({"ok": True})
         # /api/server/:id/watch/:wid
         if (len(parts) == 5 and parts[0] == "api" and parts[1] == "server"
                 and parts[3] == "watch"):
-            try: wid = int(parts[4])
-            except ValueError: return self._json({"error": "bad id"}, 400)
+            wid = parse_pg_id(parts[4])
+            if wid is None: return self._json({"error": "bad id"}, 400)
             remove_watch_player(sess["user_id"], wid)
             return self._json({"ok": True})
         return self._json({"error": "not found"}, 404)
@@ -4492,8 +4493,6 @@ class Handler(SimpleHTTPRequestHandler):
             },
         })
 
-    MAX_PG_INT = 2**31 - 1   # watched_players.id ist SERIAL
-
     def _api_player_rhythm(self, path: str):
         """GET /api/me/players/<watched_player_id>/rhythm — nur fuer den eigenen Watchlist-Eintrag."""
         parts = path.strip("/").split("/")
@@ -4501,10 +4500,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": "not found"}, 404)
         sess = self._read_session()
         if not sess: return self._json({"error": "auth required"}, 401)
-        try: wid = int(parts[3])
-        except ValueError: return self._json({"error": "bad id"}, 400)
-        if not 0 < wid <= self.MAX_PG_INT:
-            return self._json({"error": "bad id"}, 400)
+        wid = parse_pg_id(parts[3])
+        if wid is None: return self._json({"error": "bad id"}, 400)
         try:
             data = api_player_rhythm(sess["user_id"], wid)
         except Exception as e:

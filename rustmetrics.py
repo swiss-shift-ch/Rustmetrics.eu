@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import glob
 import gzip
 import os
@@ -71,17 +72,33 @@ from rm_skins import refresh_skin_prices, SKINPORT_MIN_INTERVAL_SEC, MARKETPLACE
 _bm_state = {"fails": 0, "blocked_until": 0.0, "logged": False, "paused_until": 0.0}
 _bm_lock  = threading.Lock()
 BM_RATE_LIMIT_PAUSE_SEC = 60
+BM_RATE_LIMIT_PAUSE_MAX_SEC = 3600
 
 
 class BMPaused(RuntimeError):
     """BattleMetrics answered 429; requests are held back until the pause ends."""
 
 
-def _bm_pause_after_429(retry_after: str | None) -> None:
+def _bm_retry_after_seconds(retry_after: str | None) -> float:
+    """Retry-After in Sekunden, begrenzt auf [1, BM_RATE_LIMIT_PAUSE_MAX_SEC].
+
+    «inf»/«nan» oder ein HTTP-Datum fallen auf den Standard zurueck; vorher
+    pausierte «inf» BattleMetrics bis zum Neustart (und int(inf) warf
+    OverflowError statt des HTTPError).
+    """
+    if not retry_after:
+        return BM_RATE_LIMIT_PAUSE_SEC
     try:
-        pause = max(1.0, float(retry_after)) if retry_after else BM_RATE_LIMIT_PAUSE_SEC
+        seconds = float(retry_after)
     except ValueError:
-        pause = BM_RATE_LIMIT_PAUSE_SEC
+        return BM_RATE_LIMIT_PAUSE_SEC
+    if not math.isfinite(seconds):
+        return BM_RATE_LIMIT_PAUSE_SEC
+    return min(BM_RATE_LIMIT_PAUSE_MAX_SEC, max(1.0, seconds))
+
+
+def _bm_pause_after_429(retry_after: str | None) -> None:
+    pause = _bm_retry_after_seconds(retry_after)
     with _bm_lock:
         now = time.time()
         starts_pause = now >= _bm_state["paused_until"]

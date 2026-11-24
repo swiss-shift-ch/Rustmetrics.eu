@@ -68,6 +68,35 @@ class BmGetPauseTest(_BMStateTestCase):
         self.assertAlmostEqual(rm._bm_state["paused_until"], self.clock.now + rm.BM_RATE_LIMIT_PAUSE_SEC)
 
 
+class RetryAfterBoundsTest(_BMStateTestCase):
+    def _pause_for(self, header: str) -> float:
+        rm._bm_pause_after_429(header)
+        return rm._bm_state["paused_until"] - self.clock.now
+
+    def test_infinite_retry_after_falls_back_to_default(self):
+        self.assertAlmostEqual(self._pause_for("inf"), rm.BM_RATE_LIMIT_PAUSE_SEC)
+
+    def test_nan_retry_after_falls_back_to_default(self):
+        self.assertAlmostEqual(self._pause_for("nan"), rm.BM_RATE_LIMIT_PAUSE_SEC)
+
+    def test_huge_retry_after_is_capped(self):
+        self.assertAlmostEqual(self._pause_for("1e12"), rm.BM_RATE_LIMIT_PAUSE_MAX_SEC)
+
+    def test_small_retry_after_has_one_second_floor(self):
+        self.assertAlmostEqual(self._pause_for("0"), 1.0)
+
+    def test_http_date_retry_after_falls_back_to_default(self):
+        pause = self._pause_for("Wed, 21 Oct 2026 07:28:00 GMT")
+        self.assertAlmostEqual(pause, rm.BM_RATE_LIMIT_PAUSE_SEC)
+
+    def test_infinite_retry_after_keeps_http_error(self):
+        with mock.patch.object(rm.urllib.request, "urlopen", side_effect=_http_429("inf")):
+            with self.assertRaises(urllib.error.HTTPError):
+                rm.bm_get("https://api.battlemetrics.com/servers")
+        self.clock.now += rm.BM_RATE_LIMIT_PAUSE_MAX_SEC + 1
+        self.assertLess(rm._bm_state["paused_until"], self.clock.now)
+
+
 class GetBmIdBackoffTest(_BMStateTestCase):
     def test_failed_lookup_is_retried_only_after_backoff(self):
         with mock.patch.object(rm, "_bm_search_id", side_effect=RuntimeError("boom")) as search:

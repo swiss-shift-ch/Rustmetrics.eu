@@ -65,5 +65,28 @@ class MatchPresenceServerTest(unittest.TestCase):
         self.assertIsNone(match_presence_server(self.ROWS, "203.0.113.99", "203.0.113.99:28015"))
 
 
+class PresencePortNonAsciiDigitsTest(unittest.TestCase):
+    """str.isdigit() akzeptiert '²' und '٣'; int('²') wirft ValueError -> /api/friends 500."""
+
+    ROWS = [{"id": 8, "host": HOST, "port": 28015}, {"id": 9, "host": HOST, "port": 28021}]
+
+    def test_query_port_ignores_superscript_digit(self):
+        self.assertIsNone(presence_query_port(f"{HOST}:²"))
+
+    def test_query_port_ignores_arabic_indic_digits(self):
+        self.assertIsNone(presence_query_port(f"{HOST}:٢٨٠١٥"))
+
+    def test_match_falls_back_to_ip_logic_on_superscript_port(self):
+        self.assertIsNone(match_presence_server(self.ROWS, HOST, f"{HOST}:²"))
+
+    def test_match_single_server_on_ip_despite_non_ascii_port(self):
+        rows = [{"id": 1, "host": HOST, "port": 28015}]
+        self.assertEqual(match_presence_server(rows, HOST, f"{HOST}:٢٨٠١٤")["id"], 1)
+
+    def test_ascii_ports_still_work(self):
+        self.assertEqual(presence_query_port(f"{HOST}:28014"), 28015)
+        self.assertEqual(match_presence_server(self.ROWS, HOST, f"{HOST}:28020")["id"], 9)
+
+
 if __name__ == "__main__":
     unittest.main()

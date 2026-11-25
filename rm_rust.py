@@ -224,10 +224,16 @@ def pick_bm_server_id(results: list[dict], host: str, port: int) -> int | None:
         return None
 
 
+def _presence_game_port(addr: str | None) -> int | None:
+    """Game port from a Steam presence "ip:port"; only ASCII digits ("²".isdigit() is True, int("²") fails)."""
+    port_str = (addr or "").rpartition(":")[2]
+    return int(port_str) if port_str.isascii() and port_str.isdigit() else None
+
+
 def presence_query_port(addr: str | None) -> int | None:
     """Rust answers A2S on game port + 1 by default; Steam presence only reports the game port."""
-    port_str = (addr or "").rpartition(":")[2]
-    return int(port_str) + 1 if port_str.isdigit() else None
+    game_port = _presence_game_port(addr)
+    return game_port + 1 if game_port is not None else None
 
 
 def match_presence_server(servers: list[dict], host: str | None, addr: str | None) -> dict | None:
@@ -235,9 +241,8 @@ def match_presence_server(servers: list[dict], host: str | None, addr: str | Non
     if not host:
         return None
     same_host = [s for s in servers if s.get("host") == host]
-    port_str = (addr or "").rpartition(":")[2]
-    if port_str.isdigit():
-        game_port = int(port_str)
+    game_port = _presence_game_port(addr)
+    if game_port is not None:
         exact = [s for s in same_host if s.get("port") in (game_port, game_port + 1)]
         if exact:
             return exact[0]

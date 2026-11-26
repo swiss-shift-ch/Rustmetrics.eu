@@ -13,8 +13,19 @@ def _env(k, d=None, cast=str):
     try: return cast(v)
     except Exception: return d
 
+PORT_MIN, PORT_MAX = 1, 65535
+
+def _env_port(k, d):
+    """TCP-Port aus der Umgebung; ausserhalb 1..65535 gilt der Default.
+
+    Port 0 wuerde beim bind() still einen zufaelligen Port waehlen,
+    >65535/negativ erst dort mit OverflowError scheitern.
+    """
+    v = _env(k, d, int)
+    return v if PORT_MIN <= v <= PORT_MAX else d
+
 HOST            = _env("RM_HOST", "127.0.0.1")
-PORT            = _env("RM_PORT", 8765, int)
+PORT            = _env_port("RM_PORT", 8765)
 ORIGIN          = _env("RM_ORIGIN", "https://rustmetrics.eu").rstrip("/")
 
 PG_DSN = (

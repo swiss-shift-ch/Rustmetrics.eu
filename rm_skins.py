@@ -165,8 +165,28 @@ def skinport_item_to_row(item: dict) -> dict | None:
         "price": float(price) if price is not None else None,
         "currency": item.get("currency") or "EUR",
         "url": item.get("market_page") or item.get("item_page"),
-        "quantity": item.get("quantity"),
+        "quantity": _quantity_or_none(item.get("quantity")),
     }
+
+
+# skin_prices.quantity ist eine Postgres-INTEGER-Spalte.
+_PG_INT_MAX = 2**31 - 1
+
+
+def _quantity_or_none(value) -> int | None:
+    """Angebotsmenge als int, oder None wenn der Wert unbrauchbar ist.
+
+    Der Preis-Refresh schreibt alle Items in EINER Transaktion: ein einzelner
+    Wert, den Postgres nicht als INTEGER nimmt ("n/a", 1.5, > 2^31-1), wuerde
+    sonst den ganzen Refresh abbrechen.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if not isinstance(value, int) or not 0 <= value <= _PG_INT_MAX:
+        return None
+    return value
 
 
 def refresh_skin_prices(conn_ctx) -> int:

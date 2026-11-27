@@ -101,17 +101,6 @@ class TestSkinportItemToRow:
         assert row["price"] == 3.0
         assert isinstance(row["price"], float)
 
-    def test_quantity_kept_as_int(self):
-        assert skinport_item_to_row({"market_hash_name": "X", "quantity": 0})["quantity"] == 0
-        assert skinport_item_to_row({"market_hash_name": "X", "quantity": 12.0})["quantity"] == 12
-
-    def test_unusable_quantity_becomes_none(self):
-        # skin_prices.quantity ist INTEGER und der Refresh laeuft in EINER Transaktion:
-        # ein einziger kaputter Wert darf nicht den ganzen Preis-Refresh abbrechen.
-        for bad in ("n/a", "7", 1.5, -1, 2**31, True, [3], float("nan"), float("inf")):
-            row = skinport_item_to_row({"market_hash_name": "X", "quantity": bad})
-            assert row["quantity"] is None, bad
-
 
 class TestIconHashFromListingHtml:
     # Realer (gekuerzter) Ausschnitt einer Steam-Market-Listing-Seite,
@@ -218,3 +207,16 @@ class TestRefreshSkinPrices:
         assert len(insert_calls) == 1
         item_id, name, raw_category, slot, _created_at = insert_calls[0]
         assert (item_id, name, raw_category, slot) == ("Ornate Vest", "Ornate Vest", "clothing", "chest")
+
+
+class TestSkinportQuantity:
+    def test_quantity_kept_as_int(self):
+        assert skinport_item_to_row({"market_hash_name": "X", "quantity": 0})["quantity"] == 0
+        assert skinport_item_to_row({"market_hash_name": "X", "quantity": 12.0})["quantity"] == 12
+
+    def test_unusable_quantity_becomes_none(self):
+        # skin_prices.quantity ist INTEGER und der Refresh laeuft in EINER Transaktion:
+        # ein einziger kaputter Wert darf nicht den ganzen Preis-Refresh abbrechen.
+        for bad in ("n/a", "7", 1.5, -1, 2**31, True, [3], float("nan"), float("inf")):
+            row = skinport_item_to_row({"market_hash_name": "X", "quantity": bad})
+            assert row["quantity"] is None, bad

@@ -173,7 +173,7 @@ def skinport_item_to_row(item: dict) -> dict | None:
 _PG_INT_MAX = 2**31 - 1
 
 
-def _quantity_or_none(value) -> int | None:
+def _quantity_or_none(value: object) -> int | None:
     """Angebotsmenge als int, oder None wenn der Wert unbrauchbar ist.
 
     Der Preis-Refresh schreibt alle Items in EINER Transaktion: ein einzelner
@@ -184,6 +184,8 @@ def _quantity_or_none(value) -> int | None:
         return None
     if isinstance(value, float) and value.is_integer():
         value = int(value)
+    elif isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        value = int(value.strip())  # Postgres nahm "7" bisher auch an
     if not isinstance(value, int) or not 0 <= value <= _PG_INT_MAX:
         return None
     return value

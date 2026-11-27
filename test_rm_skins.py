@@ -140,11 +140,14 @@ class TestSkinportQuantity:
     def test_quantity_kept_as_int(self):
         assert skinport_item_to_row({"market_hash_name": "X", "quantity": 0})["quantity"] == 0
         assert skinport_item_to_row({"market_hash_name": "X", "quantity": 12.0})["quantity"] == 12
+        assert skinport_item_to_row({"market_hash_name": "X", "quantity": " 7 "})["quantity"] == 7
+        assert skinport_item_to_row({"market_hash_name": "X", "quantity": 2**31 - 1})["quantity"] == 2**31 - 1
+        assert skinport_item_to_row({"market_hash_name": "X"})["quantity"] is None
 
     def test_unusable_quantity_becomes_none(self):
         # skin_prices.quantity ist INTEGER und der Refresh laeuft in EINER Transaktion:
         # ein einziger kaputter Wert darf nicht den ganzen Preis-Refresh abbrechen.
-        for bad in ("n/a", "7", 1.5, -1, 2**31, True, [3], float("nan"), float("inf")):
+        for bad in ("n/a", "²", "-3", "", 1.5, -1, 2**31, True, [3], float("nan"), float("inf")):
             row = skinport_item_to_row({"market_hash_name": "X", "quantity": bad})
             assert row["quantity"] is None, bad
 

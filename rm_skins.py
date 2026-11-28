@@ -150,10 +150,14 @@ def skinport_item_to_row(item: dict) -> dict | None:
     """Wandelt einen Skinport-API-Eintrag in unser DB-Zeilenformat.
 
     Gibt None zurueck fuer Eintraege ohne market_hash_name (sollte laut
-    Doku nicht vorkommen, aber externe API -> nicht vertrauen).
+    Doku nicht vorkommen, aber externe API -> nicht vertrauen). Ebenso fuer
+    Eintraege, die kein Objekt sind oder deren Name kein Text ist: sonst
+    wirft slot_for_name() (.lower()) und der ganze Refresh wird zurueckgerollt.
     """
+    if not isinstance(item, dict):
+        return None
     name = item.get("market_hash_name")
-    if not name:
+    if not isinstance(name, str) or not name.strip():
         return None
     price = item.get("min_price")
     return {

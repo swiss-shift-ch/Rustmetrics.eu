@@ -1,6 +1,8 @@
 """Tests fuer rm_skins.py — reine Parsing/Mapping-Logik, kein Netzwerk/DB."""
 from __future__ import annotations
 
+import pytest
+
 import rm_skins
 from rm_skins import (
     STEAM_ICON_CDN,
@@ -78,6 +80,16 @@ class TestSkinportItemToRow:
 
     def test_returns_none_when_market_hash_name_missing(self):
         assert skinport_item_to_row({"currency": "EUR", "min_price": 1.0}) is None
+
+    @pytest.mark.parametrize("name", [123, ["Plywood Kilt"], {"x": 1}, True, "   "])
+    def test_returns_none_when_market_hash_name_is_not_usable_text(self, name):
+        # Ein Nicht-Text-Name brach sonst den ganzen Refresh ab (slot_for_name
+        # ruft .lower() auf -> AttributeError -> Transaktion zurueckgerollt).
+        assert skinport_item_to_row({"market_hash_name": name, "min_price": 1.0}) is None
+
+    @pytest.mark.parametrize("item", [None, "Plywood Kilt", ["Plywood Kilt"], 42])
+    def test_returns_none_when_entry_is_not_an_object(self, item):
+        assert skinport_item_to_row(item) is None
 
     def test_falls_back_to_item_page_when_market_page_missing(self):
         item = {

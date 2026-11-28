@@ -157,7 +157,7 @@ def skinport_item_to_row(item: dict) -> dict | None:
     if not isinstance(item, dict):
         return None
     name = item.get("market_hash_name")
-    if not isinstance(name, str) or not name.strip():
+    if not isinstance(name, str) or not name.strip() or "\x00" in name:
         return None
     price = item.get("min_price")
     return {
